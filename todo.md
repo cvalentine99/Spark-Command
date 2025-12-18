@@ -20,3 +20,12 @@
 - [x] Create best practices documentation
 - [x] Implement RAG support chat interface in Command Center
 - [x] Create knowledge base JSON structure for RAG retrieval
+
+## Prometheus Live Data Integration
+- [x] Create backend Prometheus API routes for metrics queries
+- [x] Create Prometheus service layer with query helpers
+- [x] Generate automated node setup script for exporters
+- [x] Add Prometheus endpoint configuration to Settings page
+- [x] Update Dashboard to fetch live data from API
+- [x] Update Nodes page to fetch live GPU telemetry
+- [x] Add connection status indicator

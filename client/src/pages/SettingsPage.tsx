@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,8 +7,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Bell, 
   ShieldAlert, 
-  Mail, 
-  Slack, 
   Save,
   Plus,
   Trash2,
@@ -22,17 +20,16 @@ import {
   ExternalLink,
   Copy,
   RefreshCw,
-  AlertTriangle
+  AlertTriangle,
+  Gauge,
+  Wifi,
+  WifiOff,
+  Download,
+  Terminal
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-
-// Splunk Logo SVG Component
-const SplunkLogo = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-  </svg>
-);
+import { trpc } from "@/lib/trpc";
 
 // Mock Alert Rules
 const initialRules = [
@@ -55,12 +52,27 @@ interface SplunkConfig {
   lastSync: string;
 }
 
+// Prometheus Configuration State
+interface PrometheusConfig {
+  url: string;
+  scrapeInterval: number;
+  refreshRate: number;
+}
+
 export default function SettingsPage() {
   const [pagerDutyKey, setPagerDutyKey] = useState("pd_integration_key_xxxxxxxx");
-  const [slackWebhook, setSlackWebhook] = useState("https://hooks.slack.com/services/...");
   const [rules, setRules] = useState(initialRules);
   const [activeTab, setActiveTab] = useState("integrations");
   
+  // Prometheus Configuration
+  const [prometheusConfig, setPrometheusConfig] = useState<PrometheusConfig>({
+    url: "http://192.168.100.10:9090",
+    scrapeInterval: 15,
+    refreshRate: 5,
+  });
+  const [prometheusStatus, setPrometheusStatus] = useState<'idle' | 'testing' | 'connected' | 'error'>('idle');
+  const [prometheusMessage, setPrometheusMessage] = useState("");
+
   // Splunk Configuration
   const [splunkConfig, setSplunkConfig] = useState<SplunkConfig>({
     enabled: true,
@@ -75,6 +87,47 @@ export default function SettingsPage() {
 
   const [splunkTestStatus, setSplunkTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
 
+  // tRPC mutations
+  const updatePrometheusConfig = trpc.metrics.updateConfig.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        setPrometheusStatus('connected');
+        setPrometheusMessage(data.message);
+        toast.success("Prometheus connected", {
+          description: `Successfully connected to ${data.url}`
+        });
+      } else {
+        setPrometheusStatus('error');
+        setPrometheusMessage(data.message);
+        toast.error("Connection failed", {
+          description: data.message
+        });
+      }
+    },
+    onError: (error) => {
+      setPrometheusStatus('error');
+      setPrometheusMessage(error.message);
+      toast.error("Connection failed", {
+        description: error.message
+      });
+    }
+  });
+
+  const healthCheck = trpc.metrics.healthCheck.useQuery(undefined, {
+    enabled: false, // Manual trigger only
+  });
+
+  const testPrometheusConnection = async () => {
+    setPrometheusStatus('testing');
+    setPrometheusMessage("Testing connection...");
+    
+    try {
+      await updatePrometheusConfig.mutateAsync({ prometheusUrl: prometheusConfig.url });
+    } catch (error) {
+      // Error handled in mutation callbacks
+    }
+  };
+
   const handleSave = () => {
     toast.success("Settings saved successfully", {
       description: "Alert configurations have been updated across the cluster."
@@ -87,7 +140,6 @@ export default function SettingsPage() {
 
   const testSplunkConnection = async () => {
     setSplunkTestStatus('testing');
-    // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 2000));
     setSplunkTestStatus('success');
     toast.success("Splunk connection verified", {
@@ -99,6 +151,13 @@ export default function SettingsPage() {
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast.success("Copied to clipboard");
+  };
+
+  const downloadSetupScript = () => {
+    window.open('/scripts/dgx-spark-setup.sh', '_blank');
+    toast.success("Download started", {
+      description: "Run this script on each DGX Spark node to install exporters."
+    });
   };
 
   return (
@@ -113,6 +172,9 @@ export default function SettingsPage() {
           <TabsTrigger value="integrations" className="data-[state=active]:bg-primary data-[state=active]:text-white">
             <Database className="h-4 w-4 mr-2" /> Integrations
           </TabsTrigger>
+          <TabsTrigger value="prometheus" className="data-[state=active]:bg-primary data-[state=active]:text-white">
+            <Gauge className="h-4 w-4 mr-2" /> Prometheus
+          </TabsTrigger>
           <TabsTrigger value="alerts" className="data-[state=active]:bg-primary data-[state=active]:text-white">
             <Bell className="h-4 w-4 mr-2" /> Alert Rules
           </TabsTrigger>
@@ -123,6 +185,205 @@ export default function SettingsPage() {
             <Settings2 className="h-4 w-4 mr-2" /> System
           </TabsTrigger>
         </TabsList>
+
+        {/* Prometheus Tab - NEW */}
+        <TabsContent value="prometheus" className="mt-0">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Connection Configuration */}
+            <GlassCard className="lg:col-span-2 border-primary/30">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-orange-500/20 to-red-500/20 flex items-center justify-center border border-orange-500/30">
+                    <Gauge className="h-6 w-6 text-orange-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-display font-bold text-lg">Prometheus Server</h3>
+                    <p className="text-sm text-muted-foreground">Connect to your DGX Spark metrics endpoint</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  {prometheusStatus === 'connected' ? (
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/30">
+                      <Wifi className="h-3 w-3 text-green-400" />
+                      <span className="text-xs font-medium text-green-400">Connected</span>
+                    </div>
+                  ) : prometheusStatus === 'error' ? (
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-500/10 border border-red-500/30">
+                      <WifiOff className="h-3 w-3 text-red-400" />
+                      <span className="text-xs font-medium text-red-400">Disconnected</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
+                      <div className="h-2 w-2 rounded-full bg-muted-foreground" />
+                      <span className="text-xs font-medium text-muted-foreground">Not Configured</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground">Prometheus URL</label>
+                    <div className="flex gap-2">
+                      <Input 
+                        value={prometheusConfig.url} 
+                        onChange={(e) => setPrometheusConfig({...prometheusConfig, url: e.target.value})}
+                        className="bg-black/20 border-white/10 font-mono text-xs"
+                        placeholder="http://192.168.100.10:9090"
+                      />
+                      <Button variant="ghost" size="icon" className="shrink-0" onClick={() => copyToClipboard(prometheusConfig.url)}>
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Enter the URL of your Prometheus server (typically running on the master node)
+                    </p>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted-foreground">Scrape Interval (s)</label>
+                      <Input 
+                        type="number"
+                        value={prometheusConfig.scrapeInterval} 
+                        onChange={(e) => setPrometheusConfig({...prometheusConfig, scrapeInterval: parseInt(e.target.value) || 15})}
+                        className="bg-black/20 border-white/10"
+                        min={5}
+                        max={60}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted-foreground">Dashboard Refresh (s)</label>
+                      <Input 
+                        type="number"
+                        value={prometheusConfig.refreshRate} 
+                        onChange={(e) => setPrometheusConfig({...prometheusConfig, refreshRate: parseInt(e.target.value) || 5})}
+                        className="bg-black/20 border-white/10"
+                        min={1}
+                        max={30}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      className="flex-1 bg-white/5 border-white/10 hover:bg-white/10"
+                      onClick={testPrometheusConnection}
+                      disabled={prometheusStatus === 'testing' || !prometheusConfig.url}
+                    >
+                      {prometheusStatus === 'testing' ? (
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      ) : prometheusStatus === 'connected' ? (
+                        <CheckCircle2 className="h-4 w-4 mr-2 text-green-400" />
+                      ) : prometheusStatus === 'error' ? (
+                        <XCircle className="h-4 w-4 mr-2 text-red-400" />
+                      ) : (
+                        <Wifi className="h-4 w-4 mr-2" />
+                      )}
+                      Test Connection
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      className="bg-white/5 border-white/10 hover:bg-white/10"
+                      onClick={() => window.open(prometheusConfig.url, '_blank')}
+                      disabled={!prometheusConfig.url}
+                    >
+                      <ExternalLink className="h-4 w-4 mr-2" /> Open UI
+                    </Button>
+                  </div>
+
+                  {prometheusMessage && (
+                    <p className={cn(
+                      "text-xs text-center p-2 rounded-lg",
+                      prometheusStatus === 'connected' ? "bg-green-500/10 text-green-400" :
+                      prometheusStatus === 'error' ? "bg-red-500/10 text-red-400" :
+                      "bg-white/5 text-muted-foreground"
+                    )}>
+                      {prometheusMessage}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  <div className="p-4 rounded-lg bg-white/5 border border-white/10 space-y-3">
+                    <h4 className="text-sm font-medium">Required Exporters</h4>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">DCGM Exporter</span>
+                        <span className="font-mono text-xs text-primary">:9400</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Node Exporter</span>
+                        <span className="font-mono text-xs text-primary">:9100</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Spark Metrics</span>
+                        <span className="font-mono text-xs text-primary">:4040</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">vLLM Metrics</span>
+                        <span className="font-mono text-xs text-primary">:8000</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
+                    <h4 className="text-sm font-medium text-primary mb-2 flex items-center gap-2">
+                      <Terminal className="h-4 w-4" /> Quick Setup
+                    </h4>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Run this script on each DGX Spark node to automatically install and configure all exporters.
+                    </p>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      className="w-full bg-primary/20 border-primary/30 hover:bg-primary/30 text-primary"
+                      onClick={downloadSetupScript}
+                    >
+                      <Download className="h-4 w-4 mr-2" /> Download Setup Script
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Connection Status Details */}
+              <div className="mt-6 pt-6 border-t border-white/10">
+                <h4 className="text-sm font-medium mb-4">Setup Instructions</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary">1</div>
+                      <span className="font-medium text-sm">Master Node</span>
+                    </div>
+                    <code className="text-xs text-muted-foreground font-mono block bg-black/30 p-2 rounded">
+                      ./dgx-spark-setup.sh --node-type master
+                    </code>
+                  </div>
+                  <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary">2</div>
+                      <span className="font-medium text-sm">Worker Node</span>
+                    </div>
+                    <code className="text-xs text-muted-foreground font-mono block bg-black/30 p-2 rounded">
+                      ./dgx-spark-setup.sh --node-type worker --master-ip [MASTER_IP]
+                    </code>
+                  </div>
+                  <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary">3</div>
+                      <span className="font-medium text-sm">Configure Dashboard</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Enter the Prometheus URL above and click "Test Connection"
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </GlassCard>
+          </div>
+        </TabsContent>
 
         {/* Integrations Tab */}
         <TabsContent value="integrations" className="mt-0">
@@ -308,27 +569,34 @@ export default function SettingsPage() {
               </div>
             </GlassCard>
 
-            {/* Slack Integration */}
+            {/* Google Workspace Integration */}
             <GlassCard>
               <div className="flex items-center gap-2 font-display font-bold text-lg mb-4">
-                <Slack className="h-5 w-5 text-purple-400" /> Slack Notifications
+                <svg className="h-5 w-5 text-blue-400" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                Google Workspace
               </div>
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-muted-foreground">Webhook URL</label>
-                  <Input 
-                    value={slackWebhook} 
-                    onChange={(e) => setSlackWebhook(e.target.value)}
-                    className="bg-black/20 border-white/10 font-mono text-xs"
-                  />
-                </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Notify on Critical</span>
+                  <span className="text-sm text-muted-foreground">Email Notifications</span>
                   <Switch defaultChecked />
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Notify on Warning</span>
+                  <span className="text-sm text-muted-foreground">Calendar Events</span>
                   <Switch />
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Drive Backup</span>
+                  <Switch />
+                </div>
+                <div className="flex items-center justify-between p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                  <div className="flex items-center gap-2 text-sm text-blue-400 font-medium">
+                    <CheckCircle2 className="h-4 w-4" /> Authenticated
+                  </div>
                 </div>
               </div>
             </GlassCard>
