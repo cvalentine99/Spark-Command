@@ -6,16 +6,19 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { MainLayout } from "./components/layout/MainLayout";
 import DashboardPage from "./pages/DashboardPage";
+import NodesPage from "./pages/NodesPage";
+import SparkPage from "./pages/SparkPage";
+import NetworkPage from "./pages/NetworkPage";
 
 function Router() {
   return (
     <MainLayout>
       <Switch>
         <Route path={"/"} component={DashboardPage} />
-        <Route path={"/nodes"} component={() => <div className="p-10 text-center text-muted-foreground">Nodes View Coming Soon</div>} />
-        <Route path={"/spark"} component={() => <div className="p-10 text-center text-muted-foreground">Spark Engine View Coming Soon</div>} />
+        <Route path={"/nodes"} component={NodesPage} />
+        <Route path={"/spark"} component={SparkPage} />
         <Route path={"/inference"} component={() => <div className="p-10 text-center text-muted-foreground">Inference View Coming Soon</div>} />
-        <Route path={"/network"} component={() => <div className="p-10 text-center text-muted-foreground">Network Topology View Coming Soon</div>} />
+        <Route path={"/network"} component={NetworkPage} />
         <Route path={"/settings"} component={() => <div className="p-10 text-center text-muted-foreground">Settings View Coming Soon</div>} />
         <Route path={"/404"} component={NotFound} />
         {/* Final fallback route */}
