@@ -29,3 +29,11 @@
 - [x] Update Dashboard to fetch live data from API
 - [x] Update Nodes page to fetch live GPU telemetry
 - [x] Add connection status indicator
+
+## Spark Job Submission Feature
+- [x] Create backend API route for Spark job submission
+- [x] Create Spark service layer for REST API integration
+- [x] Build job submission form UI with configuration options
+- [x] Add RAPIDS acceleration toggle and executor settings
+- [x] Implement job history table with status tracking
+- [x] Add job cancellation functionality
