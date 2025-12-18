@@ -12,6 +12,7 @@ import NetworkPage from "./pages/NetworkPage";
 import InferencePage from "./pages/InferencePage";
 import SettingsPage from "./pages/SettingsPage";
 import SupportPage from "./pages/SupportPage";
+import JobDetailsPage from "./pages/JobDetailsPage";
 function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
@@ -20,6 +21,7 @@ function Router() {
         <Route path={"/"} component={DashboardPage} />
         <Route path={"/nodes"} component={NodesPage} />
         <Route path={"/spark"} component={SparkPage} />
+        <Route path={"/spark/job/:id"} component={JobDetailsPage} />
         <Route path={"/inference"} component={InferencePage} />
         <Route path={"/network"} component={NetworkPage} />
         <Route path={"/settings"} component={SettingsPage} />

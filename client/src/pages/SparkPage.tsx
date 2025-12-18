@@ -43,8 +43,11 @@ import {
   ChevronRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Link } from "wouter";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { JobScheduler } from "@/components/spark/JobScheduler";
+import { CostEstimator } from "@/components/spark/CostEstimator";
 
 // Job Templates
 const jobTemplates = [
@@ -639,13 +642,15 @@ export default function SparkPage() {
                       >
                         <StopCircle className="h-4 w-4" />
                       </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-7 w-7 text-muted-foreground hover:text-primary"
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                      </Button>
+                      <Link href={`/spark/job/${job.id}`}>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-7 w-7 text-muted-foreground hover:text-primary"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </Button>
+                      </Link>
                     </div>
                   </td>
                 </tr>
@@ -670,7 +675,8 @@ export default function SparkPage() {
           </h2>
           <div className="space-y-3 max-h-[300px] overflow-y-auto">
             {(jobHistoryQuery.data || []).map((job) => (
-              <div key={job.id} className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5 hover:bg-white/10 transition-colors">
+              <Link key={job.id} href={`/spark/job/${job.id}`}>
+              <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5 hover:bg-white/10 transition-colors cursor-pointer">
                 <div className="flex items-center gap-3">
                   {job.status === 'FINISHED' ? (
                     <CheckCircle2 className="h-5 w-5 text-green-400" />
@@ -697,6 +703,7 @@ export default function SparkPage() {
                   </div>
                 </div>
               </div>
+              </Link>
             ))}
             {(!jobHistoryQuery.data || jobHistoryQuery.data.length === 0) && (
               <div className="text-center py-8 text-muted-foreground text-sm">
@@ -768,6 +775,16 @@ export default function SparkPage() {
           </div>
         </GlassCard>
       </div>
+
+      {/* Job Scheduler Section */}
+      <GlassCard>
+        <JobScheduler />
+      </GlassCard>
+
+      {/* Cost Estimator Section */}
+      <GlassCard>
+        <CostEstimator />
+      </GlassCard>
     </div>
   );
 }
