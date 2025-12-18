@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
@@ -5,31 +6,48 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { MainLayout } from "./components/layout/MainLayout";
-import DashboardPage from "./pages/DashboardPage";
-import NodesPage from "./pages/NodesPage";
-import SparkPage from "./pages/SparkPage";
-import NetworkPage from "./pages/NetworkPage";
-import InferencePage from "./pages/InferencePage";
-import SettingsPage from "./pages/SettingsPage";
-import SupportPage from "./pages/SupportPage";
-import JobDetailsPage from "./pages/JobDetailsPage";
+import { Loader2 } from "lucide-react";
+
+// Lazy load pages for better code splitting
+const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const NodesPage = lazy(() => import("./pages/NodesPage"));
+const SparkPage = lazy(() => import("./pages/SparkPage"));
+const NetworkPage = lazy(() => import("./pages/NetworkPage"));
+const InferencePage = lazy(() => import("./pages/InferencePage"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const SupportPage = lazy(() => import("./pages/SupportPage"));
+const JobDetailsPage = lazy(() => import("./pages/JobDetailsPage"));
+
+// Loading fallback component
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex flex-col items-center gap-4">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <span className="text-sm text-muted-foreground">Loading...</span>
+      </div>
+    </div>
+  );
+}
+
 function Router() {
-  // make sure to consider if you need authentication for certain routes
   return (
     <MainLayout>
-      <Switch>
-        <Route path={"/"} component={DashboardPage} />
-        <Route path={"/nodes"} component={NodesPage} />
-        <Route path={"/spark"} component={SparkPage} />
-        <Route path={"/spark/job/:id"} component={JobDetailsPage} />
-        <Route path={"/inference"} component={InferencePage} />
-        <Route path={"/network"} component={NetworkPage} />
-        <Route path={"/settings"} component={SettingsPage} />
-        <Route path={"/support"} component={SupportPage} />
-        <Route path={"/404"} component={NotFound} />
-        {/* Final fallback route */}
-        <Route component={NotFound} />
-      </Switch>
+      <Suspense fallback={<PageLoader />}>
+        <Switch>
+          <Route path={"/"} component={DashboardPage} />
+          <Route path={"/nodes"} component={NodesPage} />
+          <Route path={"/spark"} component={SparkPage} />
+          <Route path={"/spark/job/:id"} component={JobDetailsPage} />
+          <Route path={"/inference"} component={InferencePage} />
+          <Route path={"/network"} component={NetworkPage} />
+          <Route path={"/settings"} component={SettingsPage} />
+          <Route path={"/support"} component={SupportPage} />
+          <Route path={"/404"} component={NotFound} />
+          {/* Final fallback route */}
+          <Route component={NotFound} />
+        </Switch>
+      </Suspense>
     </MainLayout>
   );
 }
