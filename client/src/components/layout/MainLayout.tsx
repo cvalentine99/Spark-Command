@@ -10,7 +10,8 @@ import {
   Search, 
   Bell, 
   User,
-  Menu
+  Menu,
+  MessageCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -30,6 +31,7 @@ export function MainLayout({ children }: MainLayoutProps) {
     { name: "Inference", path: "/inference", icon: BrainCircuit },
     { name: "Network", path: "/network", icon: Network },
     { name: "Settings", path: "/settings", icon: Settings },
+    { name: "Support", path: "/support", icon: MessageCircle },
   ];
 
   return (

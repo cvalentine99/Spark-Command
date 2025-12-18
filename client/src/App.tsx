@@ -11,6 +11,7 @@ import SparkPage from "./pages/SparkPage";
 import NetworkPage from "./pages/NetworkPage";
 import InferencePage from "./pages/InferencePage";
 import SettingsPage from "./pages/SettingsPage";
+import SupportPage from "./pages/SupportPage";
 function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
@@ -22,6 +23,7 @@ function Router() {
         <Route path={"/inference"} component={InferencePage} />
         <Route path={"/network"} component={NetworkPage} />
         <Route path={"/settings"} component={SettingsPage} />
+        <Route path={"/support"} component={SupportPage} />
         <Route path={"/404"} component={NotFound} />
         {/* Final fallback route */}
         <Route component={NotFound} />

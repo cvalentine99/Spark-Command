@@ -1,0 +1,254 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2024-12-18",
+  "categories": [
+    {
+      "id": "hardware",
+      "name": "Hardware Specifications",
+      "description": "DGX Spark hardware specifications, components, and physical requirements",
+      "documents": [
+        {
+          "id": "hw-001",
+          "title": "DGX Spark Hardware Specifications",
+          "path": "hardware/dgx-spark-specifications.md",
+          "tags": ["specifications", "gb10", "blackwell", "cpu", "gpu", "memory", "storage", "power"],
+          "summary": "Complete hardware specifications for NVIDIA DGX Spark including GB10 Superchip details, CPU/GPU specs, unified memory architecture, connectivity, and environmental requirements."
+        }
+      ]
+    },
+    {
+      "id": "software",
+      "name": "Software Stack",
+      "description": "Operating system, CUDA, frameworks, and development tools",
+      "documents": [
+        {
+          "id": "sw-001",
+          "title": "DGX Spark Software Stack",
+          "path": "software/software-stack.md",
+          "tags": ["cuda", "pytorch", "tensorflow", "rapids", "vllm", "triton", "docker", "containers"],
+          "summary": "Complete software stack documentation including DGX OS, CUDA platform, AI frameworks, RAPIDS ecosystem, inference serving, and development tools."
+        }
+      ]
+    },
+    {
+      "id": "networking",
+      "name": "Networking",
+      "description": "Network configuration, cluster setup, and connectivity",
+      "documents": [
+        {
+          "id": "net-001",
+          "title": "Cluster Networking Guide",
+          "path": "networking/cluster-networking.md",
+          "tags": ["network", "cluster", "usb4", "thunderbolt", "ethernet", "firewall", "ssh", "nfs"],
+          "summary": "Comprehensive networking guide for DGX Spark clusters including USB4 interconnect setup, 10GbE configuration, firewall rules, SSH setup, and NFS shared storage."
+        }
+      ]
+    },
+    {
+      "id": "troubleshooting",
+      "name": "Troubleshooting",
+      "description": "Problem diagnosis and resolution guides",
+      "documents": [
+        {
+          "id": "ts-001",
+          "title": "GPU Troubleshooting Guide",
+          "path": "troubleshooting/gpu-issues.md",
+          "tags": ["gpu", "cuda", "driver", "memory", "temperature", "xid", "errors"],
+          "summary": "Troubleshooting guide for GPU-related issues including detection problems, CUDA OOM, temperature issues, XID errors, and performance problems."
+        },
+        {
+          "id": "ts-002",
+          "title": "Spark & RAPIDS Troubleshooting",
+          "path": "troubleshooting/spark-rapids-issues.md",
+          "tags": ["spark", "rapids", "jobs", "executors", "memory", "performance", "skew"],
+          "summary": "Troubleshooting guide for Apache Spark and RAPIDS issues including job failures, plugin problems, memory issues, and performance optimization."
+        },
+        {
+          "id": "ts-003",
+          "title": "Networking Troubleshooting",
+          "path": "troubleshooting/networking-issues.md",
+          "tags": ["network", "connectivity", "thunderbolt", "dns", "nfs", "ssh", "firewall"],
+          "summary": "Troubleshooting guide for network-related issues including connectivity problems, USB4 interconnect issues, DNS resolution, NFS mounts, and SSH problems."
+        }
+      ]
+    },
+    {
+      "id": "faq",
+      "name": "Frequently Asked Questions",
+      "description": "Common questions and answers about DGX Spark",
+      "documents": [
+        {
+          "id": "faq-001",
+          "title": "General FAQ",
+          "path": "faq/general-faq.md",
+          "tags": ["faq", "general", "specifications", "cluster", "performance", "maintenance"],
+          "summary": "Frequently asked questions covering general information, hardware, software, performance, clustering, networking, and maintenance topics."
+        }
+      ]
+    },
+    {
+      "id": "best-practices",
+      "name": "Best Practices",
+      "description": "Recommended practices for operation and development",
+      "documents": [
+        {
+          "id": "bp-001",
+          "title": "Operations Guide",
+          "path": "best-practices/operations-guide.md",
+          "tags": ["best-practices", "setup", "memory", "performance", "security", "monitoring", "maintenance"],
+          "summary": "Best practices guide covering system setup, memory management, performance optimization, cluster operation, security, monitoring, and maintenance."
+        }
+      ]
+    }
+  ],
+  "quick_answers": [
+    {
+      "question": "What is the memory capacity of DGX Spark?",
+      "answer": "DGX Spark has 128GB of unified LPDDR5x memory shared between CPU and GPU. A two-node cluster has 256GB total.",
+      "source": "hw-001"
+    },
+    {
+      "question": "How do I check GPU status?",
+      "answer": "Run 'nvidia-smi' for basic status or 'dcgmi health -c -j' for detailed health check.",
+      "source": "ts-001"
+    },
+    {
+      "question": "What is the TDP of DGX Spark?",
+      "answer": "The TDP (Thermal Design Power) is 265W under full load. Idle power is approximately 25W.",
+      "source": "hw-001"
+    },
+    {
+      "question": "How do I connect two DGX Sparks?",
+      "answer": "Connect the USB4/Thunderbolt ports using a certified USB4 40Gbps active cable (max 2m length), then configure the network interface.",
+      "source": "net-001"
+    },
+    {
+      "question": "What CUDA version is supported?",
+      "answer": "DGX Spark supports CUDA 12.x. The system comes pre-installed with the latest compatible CUDA toolkit.",
+      "source": "sw-001"
+    },
+    {
+      "question": "How do I fix GPU not detected?",
+      "answer": "Try: 1) sudo modprobe nvidia, 2) Check secure boot status, 3) Reinstall driver with 'sudo apt install nvidia-driver-550'.",
+      "source": "ts-001"
+    },
+    {
+      "question": "What is the cluster interconnect bandwidth?",
+      "answer": "The USB4/Thunderbolt interconnect provides 80 Gbps bidirectional bandwidth with sub-2μs latency.",
+      "source": "net-001"
+    },
+    {
+      "question": "How do I enable RAPIDS for Spark?",
+      "answer": "Add 'spark.plugins=com.nvidia.spark.SQLPlugin' and 'spark.rapids.sql.enabled=true' to spark-defaults.conf.",
+      "source": "ts-002"
+    },
+    {
+      "question": "What ports need to be open for Spark?",
+      "answer": "Essential ports: 7077 (Master), 8080 (Master UI), 8081 (Worker UI), 4040 (App UI), 6066 (REST).",
+      "source": "net-001"
+    },
+    {
+      "question": "How do I monitor GPU temperature?",
+      "answer": "Use 'nvidia-smi dmon -s pt -d 1' or 'dcgmi dmon -e 155 -d 1000' for continuous monitoring.",
+      "source": "ts-001"
+    }
+  ],
+  "error_codes": [
+    {
+      "code": "XID 13",
+      "description": "Graphics Engine Exception",
+      "severity": "high",
+      "solution": "Update driver or reset GPU with 'sudo nvidia-smi -r'",
+      "source": "ts-001"
+    },
+    {
+      "code": "XID 31",
+      "description": "GPU memory page fault",
+      "severity": "high",
+      "solution": "Check for memory corruption, update driver",
+      "source": "ts-001"
+    },
+    {
+      "code": "XID 43",
+      "description": "GPU stopped processing",
+      "severity": "critical",
+      "solution": "Check power supply, reseat connections, reboot",
+      "source": "ts-001"
+    },
+    {
+      "code": "XID 48",
+      "description": "Double Bit ECC Error",
+      "severity": "critical",
+      "solution": "Run diagnostics, may require RMA",
+      "source": "ts-001"
+    },
+    {
+      "code": "XID 79",
+      "description": "GPU fallen off the bus",
+      "severity": "critical",
+      "solution": "Check hardware connections, power supply, contact support",
+      "source": "ts-001"
+    },
+    {
+      "code": "CUDA OOM",
+      "description": "CUDA out of memory",
+      "severity": "medium",
+      "solution": "Reduce batch size, enable gradient checkpointing, clear GPU memory",
+      "source": "ts-001"
+    },
+    {
+      "code": "NCCL Error",
+      "description": "Multi-GPU communication failure",
+      "severity": "medium",
+      "solution": "Check P2P support, configure NCCL environment variables",
+      "source": "ts-001"
+    }
+  ],
+  "commands": [
+    {
+      "command": "nvidia-smi",
+      "description": "Display GPU status, utilization, and memory usage",
+      "category": "monitoring"
+    },
+    {
+      "command": "nvidia-smi -q",
+      "description": "Display detailed GPU information",
+      "category": "monitoring"
+    },
+    {
+      "command": "nvidia-smi dmon -s u -d 1",
+      "description": "Monitor GPU utilization in real-time",
+      "category": "monitoring"
+    },
+    {
+      "command": "dcgmi health -c -j",
+      "description": "Run DCGM health check with JSON output",
+      "category": "diagnostics"
+    },
+    {
+      "command": "dcgmi diag -r 3",
+      "description": "Run comprehensive GPU diagnostics",
+      "category": "diagnostics"
+    },
+    {
+      "command": "sudo nvidia-smi -r",
+      "description": "Reset GPU",
+      "category": "recovery"
+    },
+    {
+      "command": "sudo nvidia-smi -pl 200",
+      "description": "Set GPU power limit to 200W",
+      "category": "configuration"
+    },
+    {
+      "command": "boltctl list",
+      "description": "List Thunderbolt devices",
+      "category": "networking"
+    },
+    {
+      "command": "iperf3 -c <host> -t 30",
+      "description": "Test network bandwidth",
+      "category": "networking"
+    }
+  ]
+}
