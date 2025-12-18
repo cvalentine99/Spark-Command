@@ -147,9 +147,18 @@ export function MainLayout({ children }: MainLayoutProps) {
         {/* Page Content */}
         <main className="flex-1 overflow-y-auto p-6 relative">
           {/* Background Grid Pattern */}
-          <div className="absolute inset-0 pointer-events-none opacity-[0.02]" 
-               style={{ backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '40px 40px' }} 
+          {/* Animated Grid Background */}
+          <div className="absolute inset-0 pointer-events-none opacity-[0.03]" 
+               style={{ 
+                 backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', 
+                 backgroundSize: '40px 40px',
+                 maskImage: 'radial-gradient(circle at center, black 40%, transparent 100%)'
+               }} 
           />
+          
+          {/* Ambient Glow Orbs */}
+          <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-primary/5 blur-[120px] pointer-events-none animate-pulse" style={{ animationDuration: '8s' }} />
+          <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-purple-500/5 blur-[120px] pointer-events-none animate-pulse" style={{ animationDuration: '12s' }} />
           
           <div className="container mx-auto max-w-7xl relative z-10">
             {children}

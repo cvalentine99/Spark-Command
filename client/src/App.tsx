@@ -9,6 +9,8 @@ import DashboardPage from "./pages/DashboardPage";
 import NodesPage from "./pages/NodesPage";
 import SparkPage from "./pages/SparkPage";
 import NetworkPage from "./pages/NetworkPage";
+import InferencePage from "./pages/InferencePage";
+import SettingsPage from "./pages/SettingsPage";
 
 function Router() {
   return (
@@ -17,9 +19,9 @@ function Router() {
         <Route path={"/"} component={DashboardPage} />
         <Route path={"/nodes"} component={NodesPage} />
         <Route path={"/spark"} component={SparkPage} />
-        <Route path={"/inference"} component={() => <div className="p-10 text-center text-muted-foreground">Inference View Coming Soon</div>} />
+        <Route path={"/inference"} component={InferencePage} />
         <Route path={"/network"} component={NetworkPage} />
-        <Route path={"/settings"} component={() => <div className="p-10 text-center text-muted-foreground">Settings View Coming Soon</div>} />
+        <Route path={"/settings"} component={SettingsPage} />
         <Route path={"/404"} component={NotFound} />
         {/* Final fallback route */}
         <Route component={NotFound} />
