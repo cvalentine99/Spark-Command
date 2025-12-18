@@ -1,0 +1,24 @@
+<nav search_view="search" color="#FF6B00">
+  <view name="cluster_overview" default="true" />
+  <view name="gpu_details" />
+  <view name="inference_monitoring" />
+  <view name="spark_jobs" />
+  <collection label="Reports">
+    <saved name="DGX Spark - Daily Cluster Health Report" />
+    <saved name="DGX Spark - Weekly Inference Performance Report" />
+    <saved name="DGX Spark - Monthly Utilization Summary" />
+  </collection>
+  <collection label="Alerts">
+    <saved name="DGX Spark - Critical: GPU Temperature Exceeded" />
+    <saved name="DGX Spark - Critical: Node Offline" />
+    <saved name="DGX Spark - Critical: GPU XID Error Detected" />
+    <saved name="DGX Spark - Critical: GPU Memory Exhausted" />
+    <saved name="DGX Spark - High: GPU Temperature Warning" />
+    <saved name="DGX Spark - High: Spark Job Failed" />
+    <saved name="DGX Spark - High: Inference Latency Spike" />
+  </collection>
+  <view name="search" />
+  <view name="dashboards" />
+  <view name="reports" />
+  <view name="alerts" />
+</nav>

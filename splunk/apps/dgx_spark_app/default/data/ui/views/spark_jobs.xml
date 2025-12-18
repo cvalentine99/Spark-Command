@@ -1,0 +1,259 @@
+<dashboard version="1.1" theme="dark">
+  <label>Apache Spark Jobs</label>
+  <description>Spark job monitoring and RAPIDS acceleration analytics</description>
+  
+  <fieldset submitButton="false" autoRun="true">
+    <input type="time" token="time_range" searchWhenChanged="true">
+      <label>Time Range</label>
+      <default>
+        <earliest>-4h@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="log_level" searchWhenChanged="true">
+      <label>Log Level</label>
+      <choice value="*">All</choice>
+      <choice value="ERROR">ERROR</choice>
+      <choice value="WARN">WARN</choice>
+      <choice value="INFO">INFO</choice>
+      <default>*</default>
+    </input>
+    <input type="dropdown" token="refresh_interval" searchWhenChanged="true">
+      <label>Refresh</label>
+      <choice value="30s">30 seconds</choice>
+      <choice value="1m">1 minute</choice>
+      <choice value="5m">5 minutes</choice>
+      <default>1m</default>
+    </input>
+  </fieldset>
+
+  <!-- Job Status Row -->
+  <row>
+    <panel>
+      <title>Active Jobs</title>
+      <single>
+        <search>
+          <query>index=dgx_spark_apps sourcetype=spark:driver "Job submitted" earliest=-1h 
+| rex "job_(?&lt;job_id&gt;\d+)" 
+| stats dc(job_id) as active_jobs</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">none</option>
+        <option name="useColors">0</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Completed Jobs</title>
+      <single>
+        <search>
+          <query>index=dgx_spark_apps sourcetype=spark:driver "Job finished" 
+| rex "job_(?&lt;job_id&gt;\d+)" 
+| stats dc(job_id) as completed_jobs</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">none</option>
+        <option name="useColors">0</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Failed Jobs</title>
+      <single>
+        <search>
+          <query>index=dgx_spark_apps sourcetype=spark:driver "Job failed" 
+| rex "job_(?&lt;job_id&gt;\d+)" 
+| stats dc(job_id) as failed_jobs</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[0,1]</option>
+        <option name="useColors">1</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Active Executors</title>
+      <single>
+        <search>
+          <query>index=dgx_spark_apps sourcetype=spark:executor earliest=-5m 
+| stats dc(host) as executors</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">none</option>
+        <option name="useColors">0</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Error Rate</title>
+      <single>
+        <search>
+          <query>index=dgx_spark_apps sourcetype=spark:* 
+| stats count(eval(log_level="ERROR")) as errors, count as total 
+| eval error_rate=round((errors/total)*100,2)</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">none</option>
+        <option name="field">error_rate</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[1,5]</option>
+        <option name="useColors">1</option>
+        <option name="unit">%</option>
+      </single>
+    </panel>
+  </row>
+
+  <!-- Job Timeline -->
+  <row>
+    <panel>
+      <title>Job Activity Timeline</title>
+      <chart>
+        <search>
+          <query>index=dgx_spark_apps sourcetype=spark:driver ("Job submitted" OR "Job finished" OR "Job failed") 
+| rex "job_(?&lt;job_id&gt;\d+)" 
+| eval status=case(match(_raw, "submitted"), "Submitted", match(_raw, "finished"), "Completed", match(_raw, "failed"), "Failed", 1=1, "Unknown") 
+| timechart span=5m count by status</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">Jobs</option>
+        <option name="charting.legend.placement">bottom</option>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- Log Level Distribution -->
+  <row>
+    <panel>
+      <title>Log Level Distribution</title>
+      <chart>
+        <search>
+          <query>index=dgx_spark_apps sourcetype=spark:* log_level="$log_level$" 
+| timechart span=5m count by log_level</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="charting.chart">area</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">Events</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.fieldColors">{"ERROR":"#DC4E41","WARN":"#F8BE34","INFO":"#53A051","DEBUG":"#6A5ACD"}</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Events by Host</title>
+      <chart>
+        <search>
+          <query>index=dgx_spark_apps sourcetype=spark:* log_level="$log_level$" 
+| timechart span=5m count by host</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">Events</option>
+        <option name="charting.legend.placement">bottom</option>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- RAPIDS Acceleration -->
+  <row>
+    <panel>
+      <title>RAPIDS GPU Acceleration Status</title>
+      <table>
+        <search>
+          <query>index=dgx_spark_apps sourcetype=spark:driver ("RAPIDS" OR "GPU" OR "cudf" OR "cuml") 
+| rex "(?&lt;rapids_status&gt;RAPIDS|GPU|cudf|cuml)\s+(?&lt;action&gt;enabled|disabled|initialized|loaded)" 
+| stats count by rapids_status, action 
+| rename rapids_status as "Component", action as "Status", count as "Events"</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel>
+      <title>GPU Memory Usage by Spark</title>
+      <chart>
+        <search>
+          <query>index=dgx_spark_metrics sourcetype=nvidia:smi process_name="*spark*" OR process_name="*java*" 
+| timechart span=5m sum(gpu_memory_used_mib) as "GPU Memory (MB)"</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="charting.chart">area</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">Memory (MB)</option>
+        <option name="charting.legend.placement">none</option>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- Error Analysis -->
+  <row>
+    <panel>
+      <title>Recent Errors</title>
+      <table>
+        <search>
+          <query>index=dgx_spark_apps sourcetype=spark:* log_level=ERROR 
+| table _time, host, class, message 
+| rename _time as "Time", host as "Host", class as "Class", message as "Error Message" 
+| head 25</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+
+  <!-- Executor Details -->
+  <row>
+    <panel>
+      <title>Executor Activity</title>
+      <table>
+        <search>
+          <query>index=dgx_spark_apps sourcetype=spark:executor 
+| rex "Executor (?&lt;executor_id&gt;\d+)" 
+| stats count as events, count(eval(log_level="ERROR")) as errors, latest(_time) as last_seen by host, executor_id 
+| eval last_seen=strftime(last_seen, "%Y-%m-%d %H:%M:%S") 
+| rename host as "Host", executor_id as "Executor ID", events as "Events", errors as "Errors", last_seen as "Last Seen"</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="drilldown">none</option>
+        <format type="color" field="Errors">
+          <colorPalette type="minMidMax" maxColor="#DC4E41" minColor="#53A051"></colorPalette>
+          <scale type="minMidMax" minValue="0" maxValue="10"></scale>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+</dashboard>

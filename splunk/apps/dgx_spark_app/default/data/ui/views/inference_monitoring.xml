@@ -1,0 +1,297 @@
+<dashboard version="1.1" theme="dark">
+  <label>Inference Monitoring</label>
+  <description>vLLM inference server performance and request analytics</description>
+  
+  <fieldset submitButton="false" autoRun="true">
+    <input type="time" token="time_range" searchWhenChanged="true">
+      <label>Time Range</label>
+      <default>
+        <earliest>-1h@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="selected_model" searchWhenChanged="true">
+      <label>Model</label>
+      <choice value="*">All Models</choice>
+      <search>
+        <query>index=dgx_spark_inference sourcetype=vllm:server | stats count by model | fields model</query>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </search>
+      <fieldForLabel>model</fieldForLabel>
+      <fieldForValue>model</fieldForValue>
+      <default>*</default>
+    </input>
+    <input type="dropdown" token="refresh_interval" searchWhenChanged="true">
+      <label>Refresh</label>
+      <choice value="30s">30 seconds</choice>
+      <choice value="1m">1 minute</choice>
+      <choice value="5m">5 minutes</choice>
+      <default>30s</default>
+    </input>
+  </fieldset>
+
+  <!-- KPI Row -->
+  <row>
+    <panel>
+      <title>Total Requests</title>
+      <single>
+        <search>
+          <query>index=dgx_spark_inference sourcetype=vllm:server model="$selected_model$" 
+| stats count as total_requests</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">none</option>
+        <option name="useColors">0</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Requests/Second</title>
+      <single>
+        <search>
+          <query>index=dgx_spark_inference sourcetype=vllm:server model="$selected_model$" 
+| stats count as requests 
+| eval rps=round(requests/3600,2)</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">none</option>
+        <option name="field">rps</option>
+        <option name="unit">RPS</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Avg Latency</title>
+      <single>
+        <search>
+          <query>index=dgx_spark_inference sourcetype=vllm:server model="$selected_model$" 
+| stats avg(latency_ms) as avg_latency 
+| eval avg_latency=round(avg_latency,1)</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[500,1000]</option>
+        <option name="useColors">1</option>
+        <option name="unit">ms</option>
+      </single>
+    </panel>
+    <panel>
+      <title>P95 Latency</title>
+      <single>
+        <search>
+          <query>index=dgx_spark_inference sourcetype=vllm:server model="$selected_model$" 
+| stats p95(latency_ms) as p95_latency 
+| eval p95_latency=round(p95_latency,1)</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[1000,2000]</option>
+        <option name="useColors">1</option>
+        <option name="unit">ms</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Avg Tokens/Sec</title>
+      <single>
+        <search>
+          <query>index=dgx_spark_inference sourcetype=vllm:server model="$selected_model$" 
+| stats avg(tokens_per_sec) as avg_tps 
+| eval avg_tps=round(avg_tps,1)</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">none</option>
+        <option name="useColors">0</option>
+        <option name="unit">tok/s</option>
+      </single>
+    </panel>
+  </row>
+
+  <!-- Throughput Charts -->
+  <row>
+    <panel>
+      <title>Request Rate Over Time</title>
+      <chart>
+        <search>
+          <query>index=dgx_spark_inference sourcetype=vllm:server model="$selected_model$" 
+| timechart span=1m count as requests</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="charting.chart">area</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">Requests</option>
+        <option name="charting.legend.placement">none</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Token Throughput Over Time</title>
+      <chart>
+        <search>
+          <query>index=dgx_spark_inference sourcetype=vllm:server model="$selected_model$" 
+| timechart span=1m sum(completion_tokens) as output_tokens, sum(prompt_tokens) as input_tokens</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="charting.chart">area</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">Tokens</option>
+        <option name="charting.legend.placement">bottom</option>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- Latency Analysis -->
+  <row>
+    <panel>
+      <title>Latency Distribution</title>
+      <chart>
+        <search>
+          <query>index=dgx_spark_inference sourcetype=vllm:server model="$selected_model$" 
+| eval latency_bucket=case(latency_ms&lt;100, "0-100ms", latency_ms&lt;250, "100-250ms", latency_ms&lt;500, "250-500ms", latency_ms&lt;1000, "500ms-1s", latency_ms&lt;2000, "1-2s", 1=1, "&gt;2s") 
+| stats count by latency_bucket 
+| sort latency_bucket</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.axisTitleX.text">Latency Bucket</option>
+        <option name="charting.axisTitleY.text">Request Count</option>
+        <option name="charting.legend.placement">none</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Latency Percentiles Over Time</title>
+      <chart>
+        <search>
+          <query>index=dgx_spark_inference sourcetype=vllm:server model="$selected_model$" 
+| timechart span=5m p50(latency_ms) as "P50", p95(latency_ms) as "P95", p99(latency_ms) as "P99"</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">Latency (ms)</option>
+        <option name="charting.legend.placement">bottom</option>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- Model Performance -->
+  <row>
+    <panel>
+      <title>Performance by Model</title>
+      <table>
+        <search>
+          <query>index=dgx_spark_inference sourcetype=vllm:server 
+| stats count as requests, avg(latency_ms) as avg_latency, p95(latency_ms) as p95_latency, avg(tokens_per_sec) as avg_tps, sum(completion_tokens) as total_tokens by model 
+| eval avg_latency=round(avg_latency,1), p95_latency=round(p95_latency,1), avg_tps=round(avg_tps,1) 
+| rename model as "Model", requests as "Requests", avg_latency as "Avg Latency (ms)", p95_latency as "P95 Latency (ms)", avg_tps as "Avg Tokens/s", total_tokens as "Total Tokens"</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="drilldown">none</option>
+        <format type="color" field="P95 Latency (ms)">
+          <colorPalette type="minMidMax" maxColor="#DC4E41" midColor="#F8BE34" minColor="#53A051"></colorPalette>
+          <scale type="minMidMax" minValue="0" midValue="1000" maxValue="2000"></scale>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+  <!-- Token Analysis -->
+  <row>
+    <panel>
+      <title>Prompt Token Distribution</title>
+      <chart>
+        <search>
+          <query>index=dgx_spark_inference sourcetype=vllm:server model="$selected_model$" 
+| eval token_bucket=case(prompt_tokens&lt;100, "0-100", prompt_tokens&lt;500, "100-500", prompt_tokens&lt;1000, "500-1000", prompt_tokens&lt;2000, "1000-2000", 1=1, "&gt;2000") 
+| stats count by token_bucket</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.legend.placement">right</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Completion Token Distribution</title>
+      <chart>
+        <search>
+          <query>index=dgx_spark_inference sourcetype=vllm:server model="$selected_model$" 
+| eval token_bucket=case(completion_tokens&lt;50, "0-50", completion_tokens&lt;100, "50-100", completion_tokens&lt;250, "100-250", completion_tokens&lt;500, "250-500", 1=1, "&gt;500") 
+| stats count by token_bucket</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.legend.placement">right</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Tokens/Second Over Time</title>
+      <chart>
+        <search>
+          <query>index=dgx_spark_inference sourcetype=vllm:server model="$selected_model$" 
+| timechart span=1m avg(tokens_per_sec) as "Avg Tokens/s", max(tokens_per_sec) as "Max Tokens/s"</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">Tokens/Second</option>
+        <option name="charting.legend.placement">bottom</option>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- Recent Requests -->
+  <row>
+    <panel>
+      <title>Recent Inference Requests</title>
+      <table>
+        <search>
+          <query>index=dgx_spark_inference sourcetype=vllm:server model="$selected_model$" 
+| table _time, request_id, model, prompt_tokens, completion_tokens, latency_ms, tokens_per_sec 
+| rename _time as "Time", request_id as "Request ID", model as "Model", prompt_tokens as "Input Tokens", completion_tokens as "Output Tokens", latency_ms as "Latency (ms)", tokens_per_sec as "Tokens/s" 
+| head 50</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+        <format type="color" field="Latency (ms)">
+          <colorPalette type="minMidMax" maxColor="#DC4E41" midColor="#F8BE34" minColor="#53A051"></colorPalette>
+          <scale type="minMidMax" minValue="0" midValue="500" maxValue="2000"></scale>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+</dashboard>

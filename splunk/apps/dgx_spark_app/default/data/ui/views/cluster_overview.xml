@@ -1,0 +1,271 @@
+<dashboard version="1.1" theme="dark">
+  <label>DGX Spark Cluster Overview</label>
+  <description>Real-time monitoring for 2-node DGX Spark cluster</description>
+  
+  <fieldset submitButton="false" autoRun="true">
+    <input type="time" token="time_range" searchWhenChanged="true">
+      <label>Time Range</label>
+      <default>
+        <earliest>-1h@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="refresh_interval" searchWhenChanged="true">
+      <label>Refresh</label>
+      <choice value="30s">30 seconds</choice>
+      <choice value="1m">1 minute</choice>
+      <choice value="5m">5 minutes</choice>
+      <default>30s</default>
+    </input>
+  </fieldset>
+
+  <!-- Cluster Health Row -->
+  <row>
+    <panel>
+      <title>Cluster Status</title>
+      <single>
+        <search>
+          <query>index=dgx_spark_metrics sourcetype=dcgm:metrics earliest=-5m 
+| stats dc(host) as nodes_online 
+| eval status=if(nodes_online>=2, "OPERATIONAL", "DEGRADED")
+| fields status</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[0,1]</option>
+        <option name="useColors">1</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Nodes Online</title>
+      <single>
+        <search>
+          <query>index=dgx_spark_metrics sourcetype=dcgm:metrics earliest=-5m 
+| stats dc(host) as nodes_online</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0xdc4e41","0xf8be34","0x53a051"]</option>
+        <option name="rangeValues">[1,2]</option>
+        <option name="useColors">1</option>
+        <option name="unit"> / 2</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Cluster GPU Utilization</title>
+      <single>
+        <search>
+          <query>index=dgx_spark_metrics sourcetype=dcgm:metrics 
+| stats avg(gpu_utilization) as avg_util 
+| eval avg_util=round(avg_util,1)</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[70,90]</option>
+        <option name="useColors">1</option>
+        <option name="unit">%</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Total Power Draw</title>
+      <single>
+        <search>
+          <query>index=dgx_spark_metrics sourcetype=dcgm:metrics 
+| stats sum(power_usage) as total_power 
+| eval total_power=round(total_power,0)</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[400,500]</option>
+        <option name="useColors">1</option>
+        <option name="unit">W</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Max GPU Temperature</title>
+      <single>
+        <search>
+          <query>index=dgx_spark_metrics sourcetype=dcgm:metrics 
+| stats max(temperature) as max_temp</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[75,85]</option>
+        <option name="useColors">1</option>
+        <option name="unit">°C</option>
+      </single>
+    </panel>
+  </row>
+
+  <!-- GPU Utilization Over Time -->
+  <row>
+    <panel>
+      <title>GPU Utilization Over Time</title>
+      <chart>
+        <search>
+          <query>index=dgx_spark_metrics sourcetype=dcgm:metrics 
+| timechart span=1m avg(gpu_utilization) by host</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="charting.chart">area</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">Utilization %</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.chart.nullValueMode">connect</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>GPU Temperature Over Time</title>
+      <chart>
+        <search>
+          <query>index=dgx_spark_metrics sourcetype=dcgm:metrics 
+| timechart span=1m max(temperature) by host</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">Temperature °C</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.chart.nullValueMode">connect</option>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- Memory and Power -->
+  <row>
+    <panel>
+      <title>GPU Memory Usage Over Time</title>
+      <chart>
+        <search>
+          <query>index=dgx_spark_metrics sourcetype=dcgm:metrics 
+| eval memory_used_gb=fb_memory_used/1024 
+| timechart span=1m avg(memory_used_gb) by host</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="charting.chart">area</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">Memory (GB)</option>
+        <option name="charting.legend.placement">bottom</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Power Consumption Over Time</title>
+      <chart>
+        <search>
+          <query>index=dgx_spark_metrics sourcetype=dcgm:metrics 
+| timechart span=1m sum(power_usage) by host</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="charting.chart">area</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">Power (Watts)</option>
+        <option name="charting.legend.placement">bottom</option>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- Node Details -->
+  <row>
+    <panel>
+      <title>DGX-SPARK-01 (Master) - Current Status</title>
+      <table>
+        <search>
+          <query>index=dgx_spark_metrics sourcetype=dcgm:metrics host="dgx-spark-01*" earliest=-5m 
+| stats latest(gpu_utilization) as "GPU Util %", latest(temperature) as "Temp °C", latest(power_usage) as "Power W", latest(fb_memory_used) as "Mem Used MB", latest(fb_memory_free) as "Mem Free MB" by gpu 
+| rename gpu as "GPU"</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+        <format type="color" field="GPU Util %">
+          <colorPalette type="minMidMax" maxColor="#DC4E41" midColor="#F8BE34" minColor="#53A051"></colorPalette>
+          <scale type="minMidMax" midType="percent" midValue="50"></scale>
+        </format>
+        <format type="color" field="Temp °C">
+          <colorPalette type="minMidMax" maxColor="#DC4E41" midColor="#F8BE34" minColor="#53A051"></colorPalette>
+          <scale type="minMidMax" midType="number" midValue="75"></scale>
+        </format>
+      </table>
+    </panel>
+    <panel>
+      <title>DGX-SPARK-02 (Worker) - Current Status</title>
+      <table>
+        <search>
+          <query>index=dgx_spark_metrics sourcetype=dcgm:metrics host="dgx-spark-02*" earliest=-5m 
+| stats latest(gpu_utilization) as "GPU Util %", latest(temperature) as "Temp °C", latest(power_usage) as "Power W", latest(fb_memory_used) as "Mem Used MB", latest(fb_memory_free) as "Mem Free MB" by gpu 
+| rename gpu as "GPU"</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+        <format type="color" field="GPU Util %">
+          <colorPalette type="minMidMax" maxColor="#DC4E41" midColor="#F8BE34" minColor="#53A051"></colorPalette>
+          <scale type="minMidMax" midType="percent" midValue="50"></scale>
+        </format>
+        <format type="color" field="Temp °C">
+          <colorPalette type="minMidMax" maxColor="#DC4E41" midColor="#F8BE34" minColor="#53A051"></colorPalette>
+          <scale type="minMidMax" midType="number" midValue="75"></scale>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+  <!-- Recent Alerts -->
+  <row>
+    <panel>
+      <title>Recent Critical Events</title>
+      <table>
+        <search>
+          <query>index=dgx_spark_logs OR index=dgx_spark_metrics 
+(sourcetype=nvidia:driver AND "Xid") OR (sourcetype=dcgm:metrics AND (temperature>85 OR gpu_utilization>95))
+| eval severity=case(temperature>85, "CRITICAL - High Temp", gpu_utilization>95, "WARNING - High Util", match(_raw, "Xid"), "CRITICAL - XID Error", 1=1, "INFO")
+| table _time, host, severity, _raw
+| head 20</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <refresh>$refresh_interval$</refresh>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+        <format type="color" field="severity">
+          <colorPalette type="map">{"CRITICAL - High Temp":#DC4E41,"CRITICAL - XID Error":#DC4E41,"WARNING - High Util":#F8BE34,"INFO":#53A051}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+</dashboard>
