@@ -1,0 +1,258 @@
+##############################################################################
+# Prometheus Alerting Rules - DGX Spark Cluster
+##############################################################################
+
+groups:
+  ##############################################################################
+  # Critical GPU Alerts
+  ##############################################################################
+  - name: dgx_spark_gpu_critical
+    rules:
+      # GPU Temperature Critical (>85°C)
+      - alert: GPUTemperatureCritical
+        expr: DCGM_FI_DEV_GPU_TEMP{cluster="dgx-spark-cluster"} > 85
+        for: 2m
+        labels:
+          severity: critical
+          component: gpu
+        annotations:
+          summary: "GPU temperature critical on {{ $labels.instance }}"
+          description: "GPU temperature is {{ $value }}°C (threshold: 85°C). Immediate action required to prevent thermal throttling or hardware damage."
+          runbook_url: "https://docs.nvidia.com/dgx/dgx-spark-user-guide/thermal-management.html"
+
+      # GPU Memory Exhausted (>95%)
+      - alert: GPUMemoryExhausted
+        expr: |
+          100 * DCGM_FI_DEV_FB_USED / (DCGM_FI_DEV_FB_USED + DCGM_FI_DEV_FB_FREE) > 95
+        for: 5m
+        labels:
+          severity: critical
+          component: gpu
+        annotations:
+          summary: "GPU memory exhausted on {{ $labels.instance }}"
+          description: "GPU memory utilization is {{ $value | printf \"%.1f\" }}%. OOM errors may occur."
+
+      # Node Unreachable
+      - alert: DGXSparkNodeDown
+        expr: up{job=~"dcgm-exporter|node-exporter"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: node
+        annotations:
+          summary: "DGX Spark node {{ $labels.instance }} is unreachable"
+          description: "The exporter on {{ $labels.instance }} has been down for more than 1 minute."
+
+      # GPU XID Error Detected
+      - alert: GPUXIDError
+        expr: increase(DCGM_FI_DEV_XID_ERRORS{cluster="dgx-spark-cluster"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          component: gpu
+        annotations:
+          summary: "GPU XID error detected on {{ $labels.instance }}"
+          description: "XID error {{ $value }} detected. This may indicate hardware issues or driver problems."
+
+  ##############################################################################
+  # Warning GPU Alerts
+  ##############################################################################
+  - name: dgx_spark_gpu_warning
+    rules:
+      # GPU Temperature Warning (>75°C)
+      - alert: GPUTemperatureWarning
+        expr: DCGM_FI_DEV_GPU_TEMP{cluster="dgx-spark-cluster"} > 75
+        for: 5m
+        labels:
+          severity: warning
+          component: gpu
+        annotations:
+          summary: "GPU temperature elevated on {{ $labels.instance }}"
+          description: "GPU temperature is {{ $value }}°C (warning threshold: 75°C). Monitor cooling system."
+
+      # GPU Memory High (>85%)
+      - alert: GPUMemoryHigh
+        expr: |
+          100 * DCGM_FI_DEV_FB_USED / (DCGM_FI_DEV_FB_USED + DCGM_FI_DEV_FB_FREE) > 85
+        for: 10m
+        labels:
+          severity: warning
+          component: gpu
+        annotations:
+          summary: "GPU memory usage high on {{ $labels.instance }}"
+          description: "GPU memory utilization is {{ $value | printf \"%.1f\" }}%."
+
+      # GPU Utilization Low (potential idle resources)
+      - alert: GPUUnderutilized
+        expr: avg_over_time(DCGM_FI_DEV_GPU_UTIL{cluster="dgx-spark-cluster"}[30m]) < 10
+        for: 1h
+        labels:
+          severity: warning
+          component: gpu
+        annotations:
+          summary: "GPU underutilized on {{ $labels.instance }}"
+          description: "GPU utilization has been below 10% for over 1 hour. Consider workload optimization."
+
+      # Power Draw Near Limit
+      - alert: GPUPowerDrawHigh
+        expr: DCGM_FI_DEV_POWER_USAGE{cluster="dgx-spark-cluster"} > 250
+        for: 10m
+        labels:
+          severity: warning
+          component: gpu
+        annotations:
+          summary: "GPU power draw high on {{ $labels.instance }}"
+          description: "GPU power consumption is {{ $value }}W (typical max: 265W)."
+
+  ##############################################################################
+  # System Resource Alerts
+  ##############################################################################
+  - name: dgx_spark_system_alerts
+    rules:
+      # High CPU Usage
+      - alert: HighCPUUsage
+        expr: node:cpu_utilization:avg > 90
+        for: 15m
+        labels:
+          severity: warning
+          component: cpu
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU utilization is {{ $value | printf \"%.1f\" }}% for over 15 minutes."
+
+      # High Memory Usage
+      - alert: HighMemoryUsage
+        expr: node:memory_utilization:percent > 90
+        for: 10m
+        labels:
+          severity: warning
+          component: memory
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "System memory utilization is {{ $value | printf \"%.1f\" }}%."
+
+      # Critical Memory Usage
+      - alert: CriticalMemoryUsage
+        expr: node:memory_utilization:percent > 95
+        for: 5m
+        labels:
+          severity: critical
+          component: memory
+        annotations:
+          summary: "Critical memory usage on {{ $labels.instance }}"
+          description: "System memory utilization is {{ $value | printf \"%.1f\" }}%. OOM killer may activate."
+
+      # Disk Space Low
+      - alert: DiskSpaceLow
+        expr: |
+          100 - (node_filesystem_avail_bytes{fstype=~"ext4|xfs",mountpoint="/"} / node_filesystem_size_bytes{fstype=~"ext4|xfs",mountpoint="/"} * 100) > 85
+        for: 15m
+        labels:
+          severity: warning
+          component: disk
+        annotations:
+          summary: "Disk space low on {{ $labels.instance }}"
+          description: "Root filesystem is {{ $value | printf \"%.1f\" }}% full."
+
+      # Network Interface Errors
+      - alert: NetworkInterfaceErrors
+        expr: rate(node_network_receive_errs_total{device=~"eth.*|ens.*"}[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: network
+        annotations:
+          summary: "Network errors on {{ $labels.instance }}"
+          description: "Network interface {{ $labels.device }} is experiencing {{ $value | printf \"%.1f\" }} errors/sec."
+
+  ##############################################################################
+  # Inference Service Alerts (vLLM)
+  ##############################################################################
+  - name: dgx_spark_inference_alerts
+    rules:
+      # vLLM Service Down
+      - alert: VLLMServiceDown
+        expr: up{job="vllm"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: inference
+        annotations:
+          summary: "vLLM inference service is down"
+          description: "vLLM server on {{ $labels.instance }} has been unreachable for over 1 minute."
+
+      # High Inference Latency
+      - alert: HighInferenceLatency
+        expr: vllm:request_latency:avg > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: inference
+        annotations:
+          summary: "High inference latency detected"
+          description: "Average inference latency is {{ $value | printf \"%.2f\" }}s (threshold: 5s)."
+
+      # KV Cache Full
+      - alert: KVCacheFull
+        expr: vllm:kv_cache_utilization:avg > 95
+        for: 5m
+        labels:
+          severity: warning
+          component: inference
+        annotations:
+          summary: "vLLM KV cache nearly full"
+          description: "KV cache utilization is {{ $value | printf \"%.1f\" }}%. Request queuing may occur."
+
+  ##############################################################################
+  # Spark Job Alerts
+  ##############################################################################
+  - name: dgx_spark_job_alerts
+    rules:
+      # Spark Executor Down
+      - alert: SparkExecutorDown
+        expr: up{job="spark",component="worker"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          component: spark
+        annotations:
+          summary: "Spark executor is down"
+          description: "Spark worker on {{ $labels.instance }} is unreachable."
+
+      # Long Running Spark Job
+      - alert: SparkJobStalled
+        expr: spark:active_jobs:count > 0 and spark:completed_tasks:rate5m == 0
+        for: 30m
+        labels:
+          severity: warning
+          component: spark
+        annotations:
+          summary: "Spark job appears stalled"
+          description: "Active Spark jobs detected but no tasks completed in 30 minutes."
+
+  ##############################################################################
+  # Cluster Health Alerts
+  ##############################################################################
+  - name: dgx_spark_cluster_health
+    rules:
+      # Cluster Partially Degraded
+      - alert: ClusterPartiallyDegraded
+        expr: count(up{job="dcgm-exporter",cluster="dgx-spark-cluster"} == 1) < 2
+        for: 5m
+        labels:
+          severity: warning
+          component: cluster
+        annotations:
+          summary: "DGX Spark cluster partially degraded"
+          description: "Only {{ $value }} of 2 nodes are online. Cluster capacity reduced."
+
+      # NVLink Bandwidth Degraded
+      - alert: NVLinkBandwidthDegraded
+        expr: DCGM_FI_DEV_NVLINK_BANDWIDTH_TOTAL{cluster="dgx-spark-cluster"} < 100e9
+        for: 10m
+        labels:
+          severity: warning
+          component: interconnect
+        annotations:
+          summary: "NVLink bandwidth degraded on {{ $labels.instance }}"
+          description: "NVLink bandwidth is {{ $value | humanize }}B/s, below expected 200GB/s."

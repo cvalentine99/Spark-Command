@@ -1,0 +1,116 @@
+##############################################################################
+# Prometheus Configuration for DGX Spark Cluster
+##############################################################################
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'dgx-spark-cluster'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# Load rules once and periodically evaluate them
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+# Scrape configurations
+scrape_configs:
+  ##############################################################################
+  # Prometheus Self-Monitoring
+  ##############################################################################
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+
+  ##############################################################################
+  # DCGM Exporter - NVIDIA GPU Metrics
+  # Collects: GPU utilization, temperature, power, memory, NVLink bandwidth
+  ##############################################################################
+  - job_name: 'dcgm-exporter'
+    file_sd_configs:
+      - files:
+          - /etc/prometheus/targets/dcgm-targets.yml
+        refresh_interval: 30s
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: '([^:]+):.*'
+        target_label: node_ip
+        replacement: '${1}'
+      - source_labels: [__address__]
+        regex: '([^:]+):.*'
+        target_label: instance
+        replacement: '${1}'
+
+  ##############################################################################
+  # Node Exporter - System Metrics
+  # Collects: CPU, memory, disk, network, hardware sensors
+  ##############################################################################
+  - job_name: 'node-exporter'
+    file_sd_configs:
+      - files:
+          - /etc/prometheus/targets/node-targets.yml
+        refresh_interval: 30s
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: '([^:]+):.*'
+        target_label: node_ip
+        replacement: '${1}'
+      - source_labels: [__address__]
+        regex: '([^:]+):.*'
+        target_label: instance
+        replacement: '${1}'
+
+  ##############################################################################
+  # Apache Spark Metrics
+  # Collects: Executor stats, job progress, shuffle metrics
+  ##############################################################################
+  - job_name: 'spark'
+    metrics_path: '/metrics/prometheus'
+    file_sd_configs:
+      - files:
+          - /etc/prometheus/targets/spark-targets.yml
+        refresh_interval: 30s
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: spark_instance
+
+  ##############################################################################
+  # vLLM Inference Server Metrics
+  # Collects: Request latency, throughput, KV cache usage
+  ##############################################################################
+  - job_name: 'vllm'
+    metrics_path: '/metrics'
+    file_sd_configs:
+      - files:
+          - /etc/prometheus/targets/vllm-targets.yml
+        refresh_interval: 30s
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: vllm_instance
+
+  ##############################################################################
+  # Alertmanager Metrics
+  ##############################################################################
+  - job_name: 'alertmanager'
+    static_configs:
+      - targets: ['alertmanager:9093']
+        labels:
+          service: 'alertmanager'
+
+  ##############################################################################
+  # Grafana Metrics
+  ##############################################################################
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3001']
+        labels:
+          service: 'grafana'

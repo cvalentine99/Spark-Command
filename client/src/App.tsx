@@ -11,8 +11,8 @@ import SparkPage from "./pages/SparkPage";
 import NetworkPage from "./pages/NetworkPage";
 import InferencePage from "./pages/InferencePage";
 import SettingsPage from "./pages/SettingsPage";
-
 function Router() {
+  // make sure to consider if you need authentication for certain routes
   return (
     <MainLayout>
       <Switch>

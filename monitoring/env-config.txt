@@ -1,0 +1,27 @@
+#############################################################################
+# DGX Spark Monitoring Stack - Environment Configuration
+# Copy this content to a .env file in the monitoring directory
+#############################################################################
+
+# Grafana Admin Credentials
+GF_SECURITY_ADMIN_USER=admin
+GF_SECURITY_ADMIN_PASSWORD=dgxspark2024
+
+# PagerDuty Integration (for critical alerts)
+PAGERDUTY_SERVICE_KEY=your_pagerduty_service_key_here
+
+# Slack Integration (for warning alerts)
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK
+SLACK_CHANNEL=#dgx-spark-alerts
+
+# DGX Spark Node IPs
+DGX_SPARK_01_IP=192.168.100.10
+DGX_SPARK_02_IP=192.168.100.11
+
+# Prometheus Retention Settings
+PROMETHEUS_RETENTION_TIME=30d
+PROMETHEUS_RETENTION_SIZE=50GB
+
+# Grafana Server Settings
+GF_SERVER_ROOT_URL=http://localhost:3001
+GF_SERVER_DOMAIN=localhost

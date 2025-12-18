@@ -1,0 +1,18 @@
+##############################################################################
+# Grafana Dashboard Provisioning - DGX Spark Cluster
+##############################################################################
+
+apiVersion: 1
+
+providers:
+  - name: 'DGX Spark Dashboards'
+    orgId: 1
+    folder: 'DGX Spark'
+    folderUid: 'dgx-spark'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

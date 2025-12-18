@@ -1,0 +1,131 @@
+##############################################################################
+# DGX Spark Cluster Monitoring Stack
+# Prometheus + Grafana + Alertmanager
+##############################################################################
+# 
+# Usage:
+#   docker-compose up -d
+#
+# Access:
+#   - Prometheus: http://localhost:9090
+#   - Grafana:    http://localhost:3001 (admin/dgxspark2024)
+#   - Alertmanager: http://localhost:9093
+#
+##############################################################################
+
+version: '3.8'
+
+networks:
+  monitoring:
+    driver: bridge
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  alertmanager_data:
+
+services:
+  ##############################################################################
+  # Prometheus - Metrics Collection & Storage
+  ##############################################################################
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: dgx-prometheus
+    restart: unless-stopped
+    user: root
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
+      - ./prometheus/targets:/etc/prometheus/targets:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--storage.tsdb.retention.size=50GB'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+      - '--log.level=info'
+    ports:
+      - "9090:9090"
+    networks:
+      - monitoring
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  ##############################################################################
+  # Grafana - Visualization & Dashboards
+  ##############################################################################
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: dgx-grafana
+    restart: unless-stopped
+    user: root
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=dgxspark2024
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_HTTP_PORT=3001
+      - GF_SERVER_ROOT_URL=http://localhost:3001
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-piechart-panel
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/dgx-spark-overview.json
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_FEATURE_TOGGLES_ENABLE=publicDashboards
+    ports:
+      - "3001:3001"
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  ##############################################################################
+  # Alertmanager - Alert Routing & Notifications
+  ##############################################################################
+  alertmanager:
+    image: prom/alertmanager:v0.26.0
+    container_name: dgx-alertmanager
+    restart: unless-stopped
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
+      - '--log.level=info'
+    ports:
+      - "9093:9093"
+    networks:
+      - monitoring
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9093/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  ##############################################################################
+  # Pushgateway - For batch job metrics (optional)
+  ##############################################################################
+  pushgateway:
+    image: prom/pushgateway:v1.6.2
+    container_name: dgx-pushgateway
+    restart: unless-stopped
+    ports:
+      - "9091:9091"
+    networks:
+      - monitoring

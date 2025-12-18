@@ -1,0 +1,226 @@
+##############################################################################
+# Alertmanager Configuration - DGX Spark Cluster
+##############################################################################
+
+global:
+  # Global SMTP settings (optional)
+  smtp_smarthost: 'smtp.gmail.com:587'
+  smtp_from: 'dgx-spark-alerts@yourdomain.com'
+  smtp_auth_username: 'your-email@gmail.com'
+  smtp_auth_password: 'your-app-password'
+  
+  # PagerDuty integration key (set via environment variable)
+  pagerduty_url: 'https://events.pagerduty.com/v2/enqueue'
+  
+  # Slack webhook URL (set via environment variable)
+  slack_api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+
+  # Resolve timeout
+  resolve_timeout: 5m
+
+# Route tree for alert routing
+route:
+  # Default receiver
+  receiver: 'slack-notifications'
+  
+  # Group alerts by these labels
+  group_by: ['alertname', 'cluster', 'severity', 'component']
+  
+  # Wait time before sending first notification
+  group_wait: 30s
+  
+  # Wait time before sending updated notification
+  group_interval: 5m
+  
+  # Repeat interval for unresolved alerts
+  repeat_interval: 4h
+
+  # Child routes for specific alert types
+  routes:
+    ##########################################################################
+    # Critical alerts → PagerDuty + Slack
+    ##########################################################################
+    - match:
+        severity: critical
+      receiver: 'pagerduty-critical'
+      continue: true  # Also send to Slack
+      
+    - match:
+        severity: critical
+      receiver: 'slack-critical'
+
+    ##########################################################################
+    # GPU-specific alerts → Dedicated channel
+    ##########################################################################
+    - match:
+        component: gpu
+      receiver: 'slack-gpu-alerts'
+      group_by: ['alertname', 'instance']
+
+    ##########################################################################
+    # Inference alerts → Dedicated channel
+    ##########################################################################
+    - match:
+        component: inference
+      receiver: 'slack-inference-alerts'
+
+    ##########################################################################
+    # Warning alerts → Slack only
+    ##########################################################################
+    - match:
+        severity: warning
+      receiver: 'slack-warnings'
+      group_wait: 1m
+      repeat_interval: 12h
+
+# Inhibition rules to suppress redundant alerts
+inhibit_rules:
+  # If node is down, suppress all other alerts for that node
+  - source_match:
+      alertname: 'DGXSparkNodeDown'
+    target_match_re:
+      alertname: '.+'
+    equal: ['instance']
+
+  # If GPU memory exhausted, suppress high memory warning
+  - source_match:
+      alertname: 'GPUMemoryExhausted'
+    target_match:
+      alertname: 'GPUMemoryHigh'
+    equal: ['instance']
+
+  # If temperature critical, suppress warning
+  - source_match:
+      alertname: 'GPUTemperatureCritical'
+    target_match:
+      alertname: 'GPUTemperatureWarning'
+    equal: ['instance']
+
+# Receiver definitions
+receivers:
+  ##############################################################################
+  # PagerDuty - Critical Alerts
+  ##############################################################################
+  - name: 'pagerduty-critical'
+    pagerduty_configs:
+      - service_key: 'YOUR_PAGERDUTY_SERVICE_KEY'
+        severity: critical
+        description: '{{ .CommonAnnotations.summary }}'
+        details:
+          firing: '{{ template "pagerduty.default.instances" .Alerts.Firing }}'
+          resolved: '{{ template "pagerduty.default.instances" .Alerts.Resolved }}'
+          num_firing: '{{ .Alerts.Firing | len }}'
+          num_resolved: '{{ .Alerts.Resolved | len }}'
+        links:
+          - href: 'http://localhost:9090/alerts'
+            text: 'Prometheus Alerts'
+          - href: 'http://localhost:3001/d/dgx-spark-overview'
+            text: 'Grafana Dashboard'
+
+  ##############################################################################
+  # Slack - Critical Alerts
+  ##############################################################################
+  - name: 'slack-critical'
+    slack_configs:
+      - channel: '#dgx-spark-critical'
+        username: 'DGX Spark Alert'
+        icon_emoji: ':rotating_light:'
+        color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+        title: '🚨 CRITICAL: {{ .CommonAnnotations.summary }}'
+        text: |
+          *Alert:* {{ .CommonAnnotations.summary }}
+          *Description:* {{ .CommonAnnotations.description }}
+          *Severity:* {{ .CommonLabels.severity }}
+          *Component:* {{ .CommonLabels.component }}
+          *Instance:* {{ .CommonLabels.instance }}
+          *Started:* {{ .StartsAt.Format "2006-01-02 15:04:05 UTC" }}
+        actions:
+          - type: button
+            text: 'View in Grafana'
+            url: 'http://localhost:3001/d/dgx-spark-overview'
+          - type: button
+            text: 'Silence Alert'
+            url: 'http://localhost:9093/#/silences/new'
+
+  ##############################################################################
+  # Slack - GPU Alerts
+  ##############################################################################
+  - name: 'slack-gpu-alerts'
+    slack_configs:
+      - channel: '#dgx-spark-gpu'
+        username: 'GPU Monitor'
+        icon_emoji: ':gpu:'
+        color: '{{ if eq .Status "firing" }}warning{{ else }}good{{ end }}'
+        title: '🎮 GPU Alert: {{ .CommonAnnotations.summary }}'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Instance:* {{ .Labels.instance }}
+          *Value:* {{ .Annotations.description }}
+          {{ end }}
+
+  ##############################################################################
+  # Slack - Inference Alerts
+  ##############################################################################
+  - name: 'slack-inference-alerts'
+    slack_configs:
+      - channel: '#dgx-spark-inference'
+        username: 'Inference Monitor'
+        icon_emoji: ':brain:'
+        color: '{{ if eq .Status "firing" }}warning{{ else }}good{{ end }}'
+        title: '🧠 Inference Alert: {{ .CommonAnnotations.summary }}'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          {{ end }}
+
+  ##############################################################################
+  # Slack - Warning Alerts
+  ##############################################################################
+  - name: 'slack-warnings'
+    slack_configs:
+      - channel: '#dgx-spark-warnings'
+        username: 'DGX Spark Monitor'
+        icon_emoji: ':warning:'
+        color: 'warning'
+        title: '⚠️ Warning: {{ .CommonAnnotations.summary }}'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Instance:* {{ .Labels.instance }}
+          *Description:* {{ .Annotations.description }}
+          {{ end }}
+
+  ##############################################################################
+  # Slack - Default Notifications
+  ##############################################################################
+  - name: 'slack-notifications'
+    slack_configs:
+      - channel: '#dgx-spark-alerts'
+        username: 'DGX Spark Monitor'
+        icon_emoji: ':satellite:'
+        color: '{{ if eq .Status "firing" }}warning{{ else }}good{{ end }}'
+        title: '{{ .CommonAnnotations.summary }}'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Labels.alertname }}
+          *Severity:* {{ .Labels.severity }}
+          *Instance:* {{ .Labels.instance }}
+          *Description:* {{ .Annotations.description }}
+          {{ end }}
+
+  ##############################################################################
+  # Email - Optional
+  ##############################################################################
+  - name: 'email-notifications'
+    email_configs:
+      - to: 'ops-team@yourdomain.com'
+        send_resolved: true
+        headers:
+          Subject: '[DGX Spark] {{ .Status | toUpper }}: {{ .CommonAnnotations.summary }}'
+
+  ##############################################################################
+  # Null receiver (for silencing)
+  ##############################################################################
+  - name: 'null'

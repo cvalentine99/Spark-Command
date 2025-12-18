@@ -1,0 +1,30 @@
+##############################################################################
+# Node Exporter Targets - DGX Spark System Metrics
+##############################################################################
+# Update these IP addresses to match your DGX Spark nodes
+# Default port for Node Exporter: 9100
+##############################################################################
+
+- targets:
+    - '192.168.100.10:9100'  # DGX-SPARK-01 (Master)
+    - '192.168.100.11:9100'  # DGX-SPARK-02 (Worker)
+  labels:
+    cluster: 'dgx-spark-cluster'
+    exporter: 'node'
+
+# Node-specific labels
+- targets:
+    - '192.168.100.10:9100'
+  labels:
+    cluster: 'dgx-spark-cluster'
+    exporter: 'node'
+    role: 'master'
+    hostname: 'dgx-spark-01'
+
+- targets:
+    - '192.168.100.11:9100'
+  labels:
+    cluster: 'dgx-spark-cluster'
+    exporter: 'node'
+    role: 'worker'
+    hostname: 'dgx-spark-02'

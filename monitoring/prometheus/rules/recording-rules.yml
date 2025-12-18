@@ -1,0 +1,151 @@
+##############################################################################
+# Prometheus Recording Rules - DGX Spark Cluster
+# Pre-computed metrics for dashboard performance
+##############################################################################
+
+groups:
+  ##############################################################################
+  # Cluster-Level GPU Aggregations
+  ##############################################################################
+  - name: dgx_spark_cluster_gpu
+    interval: 15s
+    rules:
+      # Average GPU utilization across entire cluster
+      - record: cluster:gpu_utilization:avg
+        expr: avg(DCGM_FI_DEV_GPU_UTIL{cluster="dgx-spark-cluster"})
+
+      # Maximum GPU utilization in cluster
+      - record: cluster:gpu_utilization:max
+        expr: max(DCGM_FI_DEV_GPU_UTIL{cluster="dgx-spark-cluster"})
+
+      # Total GPU memory used (bytes)
+      - record: cluster:gpu_memory_used_bytes:sum
+        expr: sum(DCGM_FI_DEV_FB_USED{cluster="dgx-spark-cluster"}) * 1024 * 1024
+
+      # Total GPU memory free (bytes)
+      - record: cluster:gpu_memory_free_bytes:sum
+        expr: sum(DCGM_FI_DEV_FB_FREE{cluster="dgx-spark-cluster"}) * 1024 * 1024
+
+      # GPU memory utilization percentage
+      - record: cluster:gpu_memory_utilization:avg
+        expr: |
+          100 * sum(DCGM_FI_DEV_FB_USED{cluster="dgx-spark-cluster"}) /
+          (sum(DCGM_FI_DEV_FB_USED{cluster="dgx-spark-cluster"}) + sum(DCGM_FI_DEV_FB_FREE{cluster="dgx-spark-cluster"}))
+
+      # Total power consumption (watts)
+      - record: cluster:power_watts:sum
+        expr: sum(DCGM_FI_DEV_POWER_USAGE{cluster="dgx-spark-cluster"})
+
+      # Average GPU temperature
+      - record: cluster:gpu_temperature:avg
+        expr: avg(DCGM_FI_DEV_GPU_TEMP{cluster="dgx-spark-cluster"})
+
+      # Maximum GPU temperature
+      - record: cluster:gpu_temperature:max
+        expr: max(DCGM_FI_DEV_GPU_TEMP{cluster="dgx-spark-cluster"})
+
+      # Total NVLink bandwidth (GB/s)
+      - record: cluster:nvlink_bandwidth_gbps:sum
+        expr: sum(DCGM_FI_DEV_NVLINK_BANDWIDTH_TOTAL{cluster="dgx-spark-cluster"}) / 1e9
+
+  ##############################################################################
+  # Per-Node GPU Aggregations
+  ##############################################################################
+  - name: dgx_spark_node_gpu
+    interval: 15s
+    rules:
+      # GPU utilization per node
+      - record: node:gpu_utilization:avg
+        expr: avg by (instance, node_ip) (DCGM_FI_DEV_GPU_UTIL{cluster="dgx-spark-cluster"})
+
+      # GPU memory used per node (bytes)
+      - record: node:gpu_memory_used_bytes:sum
+        expr: sum by (instance, node_ip) (DCGM_FI_DEV_FB_USED{cluster="dgx-spark-cluster"}) * 1024 * 1024
+
+      # GPU temperature per node
+      - record: node:gpu_temperature:max
+        expr: max by (instance, node_ip) (DCGM_FI_DEV_GPU_TEMP{cluster="dgx-spark-cluster"})
+
+      # Power draw per node
+      - record: node:power_watts:sum
+        expr: sum by (instance, node_ip) (DCGM_FI_DEV_POWER_USAGE{cluster="dgx-spark-cluster"})
+
+  ##############################################################################
+  # System Metrics Aggregations
+  ##############################################################################
+  - name: dgx_spark_system
+    interval: 15s
+    rules:
+      # CPU utilization per node (percentage)
+      - record: node:cpu_utilization:avg
+        expr: |
+          100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle",cluster="dgx-spark-cluster"}[5m])) * 100)
+
+      # Memory utilization per node (percentage)
+      - record: node:memory_utilization:percent
+        expr: |
+          100 * (1 - (node_memory_MemAvailable_bytes{cluster="dgx-spark-cluster"} / node_memory_MemTotal_bytes{cluster="dgx-spark-cluster"}))
+
+      # Total cluster memory (bytes)
+      - record: cluster:memory_total_bytes:sum
+        expr: sum(node_memory_MemTotal_bytes{cluster="dgx-spark-cluster"})
+
+      # Cluster memory used (bytes)
+      - record: cluster:memory_used_bytes:sum
+        expr: |
+          sum(node_memory_MemTotal_bytes{cluster="dgx-spark-cluster"}) - sum(node_memory_MemAvailable_bytes{cluster="dgx-spark-cluster"})
+
+      # Network receive rate (bytes/sec)
+      - record: node:network_receive_bytes:rate5m
+        expr: rate(node_network_receive_bytes_total{device=~"eth.*|ens.*|enp.*",cluster="dgx-spark-cluster"}[5m])
+
+      # Network transmit rate (bytes/sec)
+      - record: node:network_transmit_bytes:rate5m
+        expr: rate(node_network_transmit_bytes_total{device=~"eth.*|ens.*|enp.*",cluster="dgx-spark-cluster"}[5m])
+
+      # Disk I/O utilization
+      - record: node:disk_io_utilization:avg
+        expr: |
+          avg by (instance) (rate(node_disk_io_time_seconds_total{cluster="dgx-spark-cluster"}[5m])) * 100
+
+  ##############################################################################
+  # Inference Metrics (vLLM)
+  ##############################################################################
+  - name: dgx_spark_inference
+    interval: 15s
+    rules:
+      # Request throughput (requests/sec)
+      - record: vllm:request_throughput:rate1m
+        expr: rate(vllm_request_total{cluster="dgx-spark-cluster"}[1m])
+
+      # Average request latency (seconds)
+      - record: vllm:request_latency:avg
+        expr: |
+          rate(vllm_request_latency_seconds_sum{cluster="dgx-spark-cluster"}[5m]) /
+          rate(vllm_request_latency_seconds_count{cluster="dgx-spark-cluster"}[5m])
+
+      # Token generation rate (tokens/sec)
+      - record: vllm:tokens_per_second:rate1m
+        expr: rate(vllm_generation_tokens_total{cluster="dgx-spark-cluster"}[1m])
+
+      # KV cache utilization
+      - record: vllm:kv_cache_utilization:avg
+        expr: avg(vllm_gpu_cache_usage_perc{cluster="dgx-spark-cluster"})
+
+  ##############################################################################
+  # Spark Job Metrics
+  ##############################################################################
+  - name: dgx_spark_jobs
+    interval: 30s
+    rules:
+      # Active Spark jobs
+      - record: spark:active_jobs:count
+        expr: sum(spark_job_numActiveTasks{cluster="dgx-spark-cluster"})
+
+      # Completed tasks rate
+      - record: spark:completed_tasks:rate5m
+        expr: rate(spark_job_numCompletedTasks{cluster="dgx-spark-cluster"}[5m])
+
+      # Executor memory usage
+      - record: spark:executor_memory:avg
+        expr: avg(spark_executor_memoryUsed_bytes{cluster="dgx-spark-cluster"})

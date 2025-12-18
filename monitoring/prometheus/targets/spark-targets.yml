@@ -1,0 +1,28 @@
+##############################################################################
+# Apache Spark Metrics Targets
+##############################################################################
+# Spark exposes metrics via the Spark UI when prometheus sink is enabled
+# Default Spark UI port: 4040 (driver), 8080 (master), 8081 (worker)
+##############################################################################
+
+- targets:
+    - '192.168.100.10:4040'  # Spark Driver UI
+  labels:
+    cluster: 'dgx-spark-cluster'
+    service: 'spark'
+    component: 'driver'
+
+- targets:
+    - '192.168.100.10:8080'  # Spark Master UI
+  labels:
+    cluster: 'dgx-spark-cluster'
+    service: 'spark'
+    component: 'master'
+
+- targets:
+    - '192.168.100.10:8081'  # Spark Worker 1
+    - '192.168.100.11:8081'  # Spark Worker 2
+  labels:
+    cluster: 'dgx-spark-cluster'
+    service: 'spark'
+    component: 'worker'

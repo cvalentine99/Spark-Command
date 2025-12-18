@@ -1,0 +1,21 @@
+##############################################################################
+# vLLM Inference Server Metrics Targets
+##############################################################################
+# vLLM exposes Prometheus metrics on /metrics endpoint
+# Default vLLM port: 8000
+##############################################################################
+
+- targets:
+    - '192.168.100.10:8000'  # vLLM Server on Master
+  labels:
+    cluster: 'dgx-spark-cluster'
+    service: 'vllm'
+    model: 'llama-3-70b'
+
+# Add additional vLLM instances as needed:
+# - targets:
+#     - '192.168.100.11:8000'
+#   labels:
+#     cluster: 'dgx-spark-cluster'
+#     service: 'vllm'
+#     model: 'mistral-large'
