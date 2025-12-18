@@ -4,17 +4,24 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import Home from "./pages/Home";
-
+import { MainLayout } from "./components/layout/MainLayout";
+import DashboardPage from "./pages/DashboardPage";
 
 function Router() {
   return (
-    <Switch>
-      <Route path={"/"} component={Home} />
-      <Route path={"/404"} component={NotFound} />
-      {/* Final fallback route */}
-      <Route component={NotFound} />
-    </Switch>
+    <MainLayout>
+      <Switch>
+        <Route path={"/"} component={DashboardPage} />
+        <Route path={"/nodes"} component={() => <div className="p-10 text-center text-muted-foreground">Nodes View Coming Soon</div>} />
+        <Route path={"/spark"} component={() => <div className="p-10 text-center text-muted-foreground">Spark Engine View Coming Soon</div>} />
+        <Route path={"/inference"} component={() => <div className="p-10 text-center text-muted-foreground">Inference View Coming Soon</div>} />
+        <Route path={"/network"} component={() => <div className="p-10 text-center text-muted-foreground">Network Topology View Coming Soon</div>} />
+        <Route path={"/settings"} component={() => <div className="p-10 text-center text-muted-foreground">Settings View Coming Soon</div>} />
+        <Route path={"/404"} component={NotFound} />
+        {/* Final fallback route */}
+        <Route component={NotFound} />
+      </Switch>
+    </MainLayout>
   );
 }
 
@@ -27,7 +34,7 @@ function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider
-        defaultTheme="light"
+        defaultTheme="dark"
         // switchable
       >
         <TooltipProvider>
