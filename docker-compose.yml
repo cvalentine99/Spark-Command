@@ -1,0 +1,58 @@
+version: '3.8'
+
+# =============================================================================
+# DGX Spark Command Center - Complete Docker Compose
+# Run: docker compose up -d
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # Command Center - Main Application
+  # ===========================================================================
+  command-center:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    container_name: dgx-spark-command-center
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - PROMETHEUS_URL=http://localhost:9090
+      - DGX_SPARK_01_IP=${DGX_SPARK_01_IP:-192.168.100.10}
+      - DGX_SPARK_02_IP=${DGX_SPARK_02_IP:-192.168.100.11}
+      - SPARK_MASTER_URL=${SPARK_MASTER_URL:-spark://192.168.100.10:7077}
+      - SPARK_REST_URL=${SPARK_REST_URL:-http://192.168.100.10:6066}
+      - DEMO_MODE=${DEMO_MODE:-false}
+      - DATABASE_URL=${DATABASE_URL:-}
+      - JWT_SECRET=${JWT_SECRET:-change-this-in-production}
+    volumes:
+      - prometheus-data:/data/prometheus
+      - nginx-logs:/var/log/nginx
+      - app-logs:/var/log/supervisor
+    networks:
+      - dgx-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  dgx-network:
+    driver: bridge
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  prometheus-data:
+  nginx-logs:
+  app-logs:

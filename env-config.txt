@@ -1,0 +1,26 @@
+# =============================================================================
+# DGX Spark Command Center - Environment Configuration
+# Copy this file to .env and update with your values:
+#   cp env-config.txt .env
+# =============================================================================
+
+# DGX Spark Node IP Addresses
+DGX_SPARK_01_IP=192.168.100.10
+DGX_SPARK_02_IP=192.168.100.11
+
+# Demo Mode (set to true to use simulators instead of real hardware)
+DEMO_MODE=false
+
+# Spark Configuration
+SPARK_MASTER_URL=spark://192.168.100.10:7077
+SPARK_REST_URL=http://192.168.100.10:6066
+
+# Database (optional - for user authentication)
+DATABASE_URL=
+
+# JWT Secret (CHANGE THIS IN PRODUCTION!)
+JWT_SECRET=change-this-to-a-random-64-character-string
+
+# Alerting (optional)
+PAGERDUTY_SERVICE_KEY=
+SLACK_WEBHOOK_URL=
