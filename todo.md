@@ -49,3 +49,11 @@
 - [x] Add stage/task breakdown visualization
 - [x] Implement job comparison feature
 - [x] Add job templates management
+
+## Docker Single-Container Deployment
+- [x] Create production Dockerfile with NVIDIA CUDA base, Nginx, Node.js
+- [x] Create Nginx reverse proxy configuration
+- [x] Create docker-compose.yml with all services (Prometheus, Grafana, Spark simulators)
+- [x] Create entrypoint script for service orchestration
+- [x] Create one-command deployment script
+- [x] Create comprehensive deployment documentation

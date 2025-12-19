@@ -1,0 +1,147 @@
+# =============================================================================
+# DGX Spark Command Center - Docker Compose Deployment
+# Single command deployment: docker-compose up -d
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # ===========================================================================
+  # Main Application - DGX Spark Command Center
+  # ===========================================================================
+  command-center:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: dgx-spark-command-center:latest
+    container_name: dgx-spark-command-center
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # Node IPs - Update these with your actual DGX Spark IPs
+      - DGX_SPARK_01_IP=${DGX_SPARK_01_IP:-192.168.100.10}
+      - DGX_SPARK_02_IP=${DGX_SPARK_02_IP:-192.168.100.11}
+      # Spark Configuration
+      - SPARK_MASTER_URL=spark://${DGX_SPARK_01_IP:-192.168.100.10}:7077
+      - SPARK_REST_URL=http://${DGX_SPARK_01_IP:-192.168.100.10}:6066
+      - SPARK_UI_URL=http://${DGX_SPARK_01_IP:-192.168.100.10}:8080
+      # Internal services
+      - PROMETHEUS_URL=http://localhost:9090
+      - NODE_ENV=production
+      # Database (if using external)
+      - DATABASE_URL=${DATABASE_URL:-}
+      # Alerting
+      - PAGERDUTY_SERVICE_KEY=${PAGERDUTY_SERVICE_KEY:-}
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL:-}
+    volumes:
+      # Persistent data
+      - prometheus-data:/data/prometheus
+      - ./config/targets:/etc/prometheus/targets:ro
+      # SSL certificates (optional)
+      - ./ssl:/etc/nginx/ssl:ro
+      # Logs
+      - ./logs:/var/log
+    networks:
+      - dgx-network
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ===========================================================================
+  # Grafana - Advanced Visualization (Optional)
+  # ===========================================================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: dgx-spark-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-dgxspark}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3001
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - dgx-network
+    depends_on:
+      - command-center
+    profiles:
+      - full
+
+  # ===========================================================================
+  # Spark Simulator - For Testing Without Real Cluster
+  # ===========================================================================
+  spark-simulator:
+    image: python:3.11-slim
+    container_name: dgx-spark-simulator
+    restart: unless-stopped
+    command: >
+      bash -c "
+        pip install flask prometheus-client &&
+        python /app/simulator.py
+      "
+    volumes:
+      - ./scripts/spark-simulator.py:/app/simulator.py:ro
+    ports:
+      - "6066:6066"
+      - "8080:8080"
+    networks:
+      - dgx-network
+    profiles:
+      - demo
+
+  # ===========================================================================
+  # GPU Metrics Simulator - For Testing Without Real GPUs
+  # ===========================================================================
+  gpu-simulator:
+    image: python:3.11-slim
+    container_name: dgx-gpu-simulator
+    restart: unless-stopped
+    command: >
+      bash -c "
+        pip install flask prometheus-client &&
+        python /app/gpu-simulator.py
+      "
+    volumes:
+      - ./scripts/gpu-simulator.py:/app/gpu-simulator.py:ro
+    ports:
+      - "9400:9400"
+      - "9401:9401"
+    networks:
+      - dgx-network
+    profiles:
+      - demo
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  dgx-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local

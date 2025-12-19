@@ -1,0 +1,118 @@
+# =============================================================================
+# Prometheus Configuration for DGX Spark Command Center
+# Auto-discovers and scrapes metrics from DGX Spark nodes
+# =============================================================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'dgx-spark-cluster'
+    environment: 'production'
+
+# Alerting configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# Rule files
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+# Scrape configurations
+scrape_configs:
+  # Self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+
+  # Local node exporter
+  - job_name: 'node-local'
+    static_configs:
+      - targets: ['localhost:9100']
+        labels:
+          service: 'node-exporter'
+          node: 'command-center'
+
+  # DGX Spark Node 1 - DCGM GPU Metrics
+  - job_name: 'dcgm-spark-01'
+    static_configs:
+      - targets: ['${DGX_SPARK_01_IP:-192.168.100.10}:9400']
+        labels:
+          node: 'dgx-spark-01'
+          role: 'master'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'dgx-spark-01'
+
+  # DGX Spark Node 1 - System Metrics
+  - job_name: 'node-spark-01'
+    static_configs:
+      - targets: ['${DGX_SPARK_01_IP:-192.168.100.10}:9100']
+        labels:
+          node: 'dgx-spark-01'
+          role: 'master'
+
+  # DGX Spark Node 2 - DCGM GPU Metrics
+  - job_name: 'dcgm-spark-02'
+    static_configs:
+      - targets: ['${DGX_SPARK_02_IP:-192.168.100.11}:9400']
+        labels:
+          node: 'dgx-spark-02'
+          role: 'worker'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'dgx-spark-02'
+
+  # DGX Spark Node 2 - System Metrics
+  - job_name: 'node-spark-02'
+    static_configs:
+      - targets: ['${DGX_SPARK_02_IP:-192.168.100.11}:9100']
+        labels:
+          node: 'dgx-spark-02'
+          role: 'worker'
+
+  # Spark Master Metrics
+  - job_name: 'spark-master'
+    metrics_path: /metrics/prometheus
+    static_configs:
+      - targets: ['${DGX_SPARK_01_IP:-192.168.100.10}:8080']
+        labels:
+          service: 'spark-master'
+
+  # Spark Worker Metrics
+  - job_name: 'spark-workers'
+    metrics_path: /metrics/prometheus
+    static_configs:
+      - targets: 
+          - '${DGX_SPARK_01_IP:-192.168.100.10}:8081'
+          - '${DGX_SPARK_02_IP:-192.168.100.11}:8081'
+        labels:
+          service: 'spark-worker'
+
+  # vLLM Inference Server Metrics (if running)
+  - job_name: 'vllm'
+    static_configs:
+      - targets: 
+          - '${DGX_SPARK_01_IP:-192.168.100.10}:8000'
+          - '${DGX_SPARK_02_IP:-192.168.100.11}:8000'
+        labels:
+          service: 'vllm-inference'
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: '(.+):8000'
+        target_label: node
+        replacement: '${1}'
+
+  # File-based service discovery for dynamic targets
+  - job_name: 'file-sd-targets'
+    file_sd_configs:
+      - files:
+          - /etc/prometheus/targets/*.json
+          - /etc/prometheus/targets/*.yml
+        refresh_interval: 30s
