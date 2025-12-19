@@ -14,11 +14,14 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Default values
-MODE="production"
 DGX_SPARK_01_IP="192.168.100.10"
 DGX_SPARK_02_IP="192.168.100.11"
 SKIP_BUILD=false
 DEMO_MODE=false
+
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # =============================================================================
 # Help
@@ -69,15 +72,18 @@ while [[ $# -gt 0 ]]; do
             ;;
         --stop)
             echo -e "${YELLOW}Stopping DGX Spark Command Center...${NC}"
+            cd "$SCRIPT_DIR"
             docker-compose down
             echo -e "${GREEN}Services stopped.${NC}"
             exit 0
             ;;
         --logs)
+            cd "$SCRIPT_DIR"
             docker-compose logs -f
             exit 0
             ;;
         --status)
+            cd "$SCRIPT_DIR"
             docker-compose ps
             exit 0
             ;;
@@ -117,14 +123,13 @@ if ! command -v docker &> /dev/null; then
 fi
 
 # Check Docker Compose
-if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+if docker compose version &> /dev/null; then
+    COMPOSE_CMD="docker compose"
+elif command -v docker-compose &> /dev/null; then
+    COMPOSE_CMD="docker-compose"
+else
     echo -e "${RED}ERROR: Docker Compose is not installed. Please install Docker Compose first.${NC}"
     exit 1
-fi
-
-# Check if running as root (needed for port 80)
-if [ "$EUID" -ne 0 ] && [ "$DEMO_MODE" = false ]; then
-    echo -e "${YELLOW}WARNING: Not running as root. Port 80 may not be accessible.${NC}"
 fi
 
 echo -e "${GREEN}  ✓ Docker is installed${NC}"
@@ -136,6 +141,8 @@ echo -e "${GREEN}  ✓ Docker Compose is available${NC}"
 echo ""
 echo -e "${YELLOW}[2/5] Configuring deployment...${NC}"
 
+cd "$SCRIPT_DIR"
+
 # Create .env file
 cat > .env << EOF
 # DGX Spark Command Center Configuration
@@ -145,6 +152,9 @@ cat > .env << EOF
 DGX_SPARK_01_IP=${DGX_SPARK_01_IP}
 DGX_SPARK_02_IP=${DGX_SPARK_02_IP}
 
+# Demo Mode
+DEMO_MODE=${DEMO_MODE}
+
 # Spark Configuration
 SPARK_MASTER_URL=spark://${DGX_SPARK_01_IP}:7077
 SPARK_REST_URL=http://${DGX_SPARK_01_IP}:6066
@@ -153,6 +163,9 @@ SPARK_UI_URL=http://${DGX_SPARK_01_IP}:8080
 # Grafana (optional)
 GRAFANA_USER=admin
 GRAFANA_PASSWORD=dgxspark
+
+# JWT Secret (change in production!)
+JWT_SECRET=$(openssl rand -hex 32 2>/dev/null || echo "change-this-secret-in-production")
 
 # Alerting (configure these for notifications)
 PAGERDUTY_SERVICE_KEY=
@@ -173,7 +186,8 @@ fi
 if [ "$SKIP_BUILD" = false ]; then
     echo ""
     echo -e "${YELLOW}[3/5] Building Docker image...${NC}"
-    docker-compose build --no-cache command-center
+    echo "  This may take a few minutes..."
+    $COMPOSE_CMD build command-center
     echo -e "${GREEN}  ✓ Docker image built successfully${NC}"
 else
     echo ""
@@ -186,17 +200,11 @@ fi
 echo ""
 echo -e "${YELLOW}[4/5] Starting services...${NC}"
 
-if [ "$DEMO_MODE" = true ]; then
-    # Start with demo profile (includes simulators)
-    docker-compose --profile demo up -d
-else
-    # Production mode
-    docker-compose up -d command-center
-fi
+$COMPOSE_CMD up -d command-center
 
 # Wait for services to start
 echo "  Waiting for services to initialize..."
-sleep 10
+sleep 15
 
 # =============================================================================
 # Verify
@@ -205,22 +213,26 @@ echo ""
 echo -e "${YELLOW}[5/5] Verifying deployment...${NC}"
 
 # Check if container is running
-if docker-compose ps | grep -q "Up"; then
+if $COMPOSE_CMD ps | grep -q "Up\|running"; then
     echo -e "${GREEN}  ✓ Container is running${NC}"
 else
     echo -e "${RED}  ✗ Container failed to start${NC}"
     echo "  Showing logs:"
-    docker-compose logs --tail=50
+    $COMPOSE_CMD logs --tail=100
     exit 1
 fi
 
 # Check health endpoint
-sleep 5
-if curl -sf http://localhost/health > /dev/null 2>&1; then
-    echo -e "${GREEN}  ✓ Health check passed${NC}"
-else
-    echo -e "${YELLOW}  ⚠ Health check pending (services still starting)${NC}"
-fi
+for i in {1..10}; do
+    if curl -sf http://localhost/health > /dev/null 2>&1; then
+        echo -e "${GREEN}  ✓ Health check passed${NC}"
+        break
+    fi
+    if [ $i -eq 10 ]; then
+        echo -e "${YELLOW}  ⚠ Health check pending (services still starting)${NC}"
+    fi
+    sleep 3
+done
 
 # =============================================================================
 # Success
@@ -237,15 +249,11 @@ echo -e "    ${BLUE}http://localhost${NC}"
 echo ""
 echo "  Internal Services:"
 echo "    Prometheus:     http://localhost/prometheus/"
-if [ "$DEMO_MODE" = true ]; then
-    echo "    Spark Simulator: http://localhost:8080"
-    echo "    GPU Simulator:   http://localhost:9400/metrics"
-fi
 echo ""
 echo "  Useful Commands:"
-echo "    View logs:      ./deploy.sh --logs"
-echo "    Check status:   ./deploy.sh --status"
-echo "    Stop services:  ./deploy.sh --stop"
+echo "    View logs:      $0 --logs"
+echo "    Check status:   $0 --status"
+echo "    Stop services:  $0 --stop"
 echo ""
 
 if [ "$DEMO_MODE" = false ]; then

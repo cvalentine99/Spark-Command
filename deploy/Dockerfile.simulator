@@ -1,0 +1,20 @@
+# =============================================================================
+# DGX Spark Simulators - Lightweight container for demo mode
+# =============================================================================
+
+FROM python:3.11-slim
+
+WORKDIR /opt
+
+# Install dependencies
+RUN pip install --no-cache-dir flask prometheus_client werkzeug
+
+# Copy simulator scripts
+COPY deploy/scripts/gpu-simulator.py /opt/gpu-simulator.py
+COPY deploy/scripts/spark-simulator.py /opt/spark-simulator.py
+
+RUN chmod +x /opt/*.py
+
+EXPOSE 9400 6066 8080
+
+CMD ["python3", "/opt/gpu-simulator.py"]

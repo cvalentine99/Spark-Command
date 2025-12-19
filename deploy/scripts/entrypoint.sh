@@ -12,15 +12,9 @@ echo "  Starting services..."
 echo "=============================================="
 
 # =============================================================================
-# Environment Variable Substitution
+# Environment Variable Setup
 # =============================================================================
-echo "[1/5] Configuring environment..."
-
-# Substitute environment variables in Prometheus config
-if [ -f /etc/prometheus/prometheus.yml ]; then
-    envsubst < /etc/prometheus/prometheus.yml > /tmp/prometheus.yml
-    mv /tmp/prometheus.yml /etc/prometheus/prometheus.yml
-fi
+echo "[1/6] Configuring environment..."
 
 # Set defaults if not provided
 export DGX_SPARK_01_IP=${DGX_SPARK_01_IP:-192.168.100.10}
@@ -28,31 +22,56 @@ export DGX_SPARK_02_IP=${DGX_SPARK_02_IP:-192.168.100.11}
 export PROMETHEUS_URL=${PROMETHEUS_URL:-http://localhost:9090}
 export SPARK_MASTER_URL=${SPARK_MASTER_URL:-spark://${DGX_SPARK_01_IP}:7077}
 export SPARK_REST_URL=${SPARK_REST_URL:-http://${DGX_SPARK_01_IP}:6066}
+export DEMO_MODE=${DEMO_MODE:-false}
 
 echo "  DGX Spark Node 1: $DGX_SPARK_01_IP"
 echo "  DGX Spark Node 2: $DGX_SPARK_02_IP"
-echo "  Spark Master: $SPARK_MASTER_URL"
+echo "  Demo Mode: $DEMO_MODE"
 
 # =============================================================================
 # Directory Setup
 # =============================================================================
-echo "[2/5] Setting up directories..."
+echo "[2/6] Setting up directories..."
 
 mkdir -p /var/log/supervisor
 mkdir -p /var/log/nginx
 mkdir -p /data/prometheus
 mkdir -p /etc/prometheus/targets
 mkdir -p /etc/prometheus/rules
+mkdir -p /run/nginx
 
 # Set permissions
-chown -R nobody:nogroup /data/prometheus 2>/dev/null || true
+chown -R www-data:www-data /var/log/nginx 2>/dev/null || true
+chmod 755 /data/prometheus
 
 # =============================================================================
 # Generate Dynamic Prometheus Targets
 # =============================================================================
-echo "[3/5] Generating Prometheus targets..."
+echo "[3/6] Generating Prometheus targets..."
 
-cat > /etc/prometheus/targets/dgx-nodes.json << EOF
+if [ "$DEMO_MODE" = "true" ]; then
+    # Demo mode - use local simulators
+    cat > /etc/prometheus/targets/dgx-nodes.json << EOF
+[
+  {
+    "targets": ["localhost:9400"],
+    "labels": {
+      "job": "dcgm",
+      "cluster": "dgx-spark-demo"
+    }
+  },
+  {
+    "targets": ["localhost:9100"],
+    "labels": {
+      "job": "node",
+      "cluster": "dgx-spark-demo"
+    }
+  }
+]
+EOF
+else
+    # Production mode - use real nodes
+    cat > /etc/prometheus/targets/dgx-nodes.json << EOF
 [
   {
     "targets": ["${DGX_SPARK_01_IP}:9400", "${DGX_SPARK_02_IP}:9400"],
@@ -70,43 +89,33 @@ cat > /etc/prometheus/targets/dgx-nodes.json << EOF
   }
 ]
 EOF
+fi
+
+# =============================================================================
+# Update Prometheus Config with Environment Variables
+# =============================================================================
+echo "[4/6] Updating Prometheus configuration..."
+
+if [ -f /etc/prometheus/prometheus.yml ]; then
+    sed -i "s|\${DGX_SPARK_01_IP}|${DGX_SPARK_01_IP}|g" /etc/prometheus/prometheus.yml
+    sed -i "s|\${DGX_SPARK_02_IP}|${DGX_SPARK_02_IP}|g" /etc/prometheus/prometheus.yml
+fi
 
 # =============================================================================
 # Nginx Configuration Check
 # =============================================================================
-echo "[4/5] Validating Nginx configuration..."
+echo "[5/6] Validating Nginx configuration..."
 
 nginx -t || {
     echo "ERROR: Nginx configuration is invalid!"
+    cat /etc/nginx/nginx.conf
     exit 1
-}
-
-# =============================================================================
-# Health Check Function
-# =============================================================================
-wait_for_service() {
-    local service=$1
-    local url=$2
-    local max_attempts=${3:-30}
-    local attempt=1
-    
-    echo "  Waiting for $service..."
-    while [ $attempt -le $max_attempts ]; do
-        if curl -sf "$url" > /dev/null 2>&1; then
-            echo "  $service is ready!"
-            return 0
-        fi
-        sleep 1
-        attempt=$((attempt + 1))
-    done
-    echo "  WARNING: $service did not become ready in time"
-    return 1
 }
 
 # =============================================================================
 # Start Services
 # =============================================================================
-echo "[5/5] Starting services..."
+echo "[6/6] Starting services..."
 echo ""
 echo "=============================================="
 echo "  Services Starting:"
@@ -114,7 +123,13 @@ echo "  - Nginx (port 80)"
 echo "  - Node.js App (port 3000)"
 echo "  - Prometheus (port 9090)"
 echo "  - Node Exporter (port 9100)"
+if [ "$DEMO_MODE" = "true" ]; then
+    echo "  - GPU Simulator (port 9400)"
+    echo "  - Spark Simulator (port 6066)"
+fi
 echo "=============================================="
+echo ""
+echo "  Access the dashboard at: http://localhost"
 echo ""
 
 # Execute the main command (supervisord)
