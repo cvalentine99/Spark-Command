@@ -46,6 +46,7 @@ import { cn } from "@/lib/utils";
 import { Link } from "wouter";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { useWebSocketContext } from "@/contexts/WebSocketContext";
 import { JobScheduler } from "@/components/spark/JobScheduler";
 import { CostEstimator } from "@/components/spark/CostEstimator";
 
@@ -423,10 +424,13 @@ function JobSubmissionForm({ onClose }: { onClose: () => void }) {
 
 export default function SparkPage() {
   const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false);
+  
+  // Use WebSocket for real-time job status updates
+  const { jobUpdates, isConnected } = useWebSocketContext();
 
-  // Fetch active applications from Spark API
+  // Fetch active applications from Spark API (reduced polling when WebSocket connected)
   const applicationsQuery = trpc.spark.getApplications.useQuery(undefined, {
-    refetchInterval: 5000,
+    refetchInterval: isConnected ? 10000 : 5000, // Slower polling when WebSocket provides updates
   });
 
   // Map API data to activeJobs format
@@ -450,11 +454,18 @@ export default function SparkPage() {
     });
   }, [applicationsQuery.data]);
 
-  // Fetch job history from API
+  // Fetch job history from API (refetch when WebSocket reports job updates)
   const jobHistoryQuery = trpc.spark.getJobHistory.useQuery(
     { limit: 20, status: 'all' },
-    { refetchInterval: 10000 }
+    { refetchInterval: isConnected ? 30000 : 10000 } // Slower polling, WebSocket triggers updates
   );
+
+  // Refetch job history when WebSocket reports a job status change
+  React.useEffect(() => {
+    if (jobUpdates.length > 0 && isConnected) {
+      jobHistoryQuery.refetch();
+    }
+  }, [jobUpdates, isConnected]);
 
   // Fetch cluster resources
   const clusterResourcesQuery = trpc.spark.getClusterResources.useQuery(undefined, {

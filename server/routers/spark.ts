@@ -17,6 +17,7 @@ import {
   sparkJobTemplates,
   type SparkJobConfig,
 } from "../services/spark";
+import { broadcastJobStatus } from "../websocket";
 
 // In-memory job history (in production, this would be stored in a database)
 interface JobHistoryEntry {
@@ -90,6 +91,14 @@ export const sparkRouter = router({
         };
         jobHistory.unshift(historyEntry);
         
+        // Broadcast job status via WebSocket
+        broadcastJobStatus({
+          id: historyEntry.id,
+          submissionId: result.submissionId,
+          appName: input.appName,
+          status: historyEntry.status,
+        });
+        
         // Keep only last 100 jobs
         if (jobHistory.length > 100) {
           jobHistory = jobHistory.slice(0, 100);
@@ -112,11 +121,23 @@ export const sparkRouter = router({
         const historyIndex = jobHistory.findIndex(j => j.submissionId === input.submissionId);
         if (historyIndex !== -1) {
           const driverState = status.driverState.toUpperCase();
+          const previousStatus = jobHistory[historyIndex].status;
+          
           if (driverState === 'FINISHED' || driverState === 'FAILED' || driverState === 'KILLED') {
             jobHistory[historyIndex].status = driverState as any;
             jobHistory[historyIndex].completedAt = new Date().toISOString();
           } else if (driverState === 'RUNNING') {
             jobHistory[historyIndex].status = 'RUNNING';
+          }
+          
+          // Broadcast status change via WebSocket
+          if (previousStatus !== jobHistory[historyIndex].status) {
+            broadcastJobStatus({
+              id: jobHistory[historyIndex].id,
+              submissionId: input.submissionId,
+              appName: jobHistory[historyIndex].appName,
+              status: jobHistory[historyIndex].status,
+            });
           }
         }
       }
@@ -138,6 +159,14 @@ export const sparkRouter = router({
         if (historyIndex !== -1) {
           jobHistory[historyIndex].status = 'KILLED';
           jobHistory[historyIndex].completedAt = new Date().toISOString();
+          
+          // Broadcast job killed via WebSocket
+          broadcastJobStatus({
+            id: jobHistory[historyIndex].id,
+            submissionId: input.submissionId,
+            appName: jobHistory[historyIndex].appName,
+            status: 'KILLED',
+          });
         }
       }
 

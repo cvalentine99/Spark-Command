@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { trpc } from "@/lib/trpc";
+import { useWebSocketContext } from "@/contexts/WebSocketContext";
 import { 
   Activity, 
   Cpu, 
@@ -379,9 +380,13 @@ function formatUptime(seconds: number): string {
 export default function DashboardPage() {
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  // Fetch real metrics from backend
+  // Use WebSocket for real-time GPU metrics
+  const { gpuMetrics, systemMetrics, isConnected, status } = useWebSocketContext();
+
+  // Fetch initial data and fallback from backend (only when WebSocket not connected)
   const overviewQuery = trpc.local.getOverview.useQuery(undefined, {
-    refetchInterval: 3000, // Refresh every 3 seconds
+    refetchInterval: isConnected ? false : 5000, // Only poll if WebSocket disconnected
+    enabled: !isConnected || !gpuMetrics, // Disable when WebSocket is providing data
   });
 
   const clusterResourcesQuery = trpc.spark.getClusterResources.useQuery(undefined, {
@@ -394,18 +399,30 @@ export default function DashboardPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Extract metrics from query data
+  // Extract metrics - prefer WebSocket data, fallback to API data
   const overview = overviewQuery.data;
   const clusterResources = clusterResourcesQuery.data;
-
-  const gpuUtil = overview?.gpu.utilization ?? 0;
-  const gpuTemp = overview?.gpu.temperature ?? 0;
-  const gpuPower = overview?.gpu.powerDraw ?? 0;
-  const memUsedGB = overview?.memory.used ? overview.memory.used / (1024 * 1024 * 1024) : 0;
-  const memTotalGB = overview?.memory.total ? overview.memory.total / (1024 * 1024 * 1024) : 128;
+  
+  // Use WebSocket data if available, otherwise fall back to API data
+  const gpuUtil = gpuMetrics?.utilization ?? overview?.gpu.utilization ?? 0;
+  const gpuTemp = gpuMetrics?.temperature ?? overview?.gpu.temperature ?? 0;
+  const gpuPower = gpuMetrics?.powerDraw ?? overview?.gpu.powerDraw ?? 0;
+  const memUsedGB = systemMetrics?.memory.used 
+    ? systemMetrics.memory.used / (1024 * 1024 * 1024) 
+    : overview?.memory.used 
+      ? overview.memory.used / (1024 * 1024 * 1024) 
+      : 0;
+  const memTotalGB = systemMetrics?.memory.total 
+    ? systemMetrics.memory.total / (1024 * 1024 * 1024) 
+    : overview?.memory.total 
+      ? overview.memory.total / (1024 * 1024 * 1024) 
+      : 128;
   const uptime = overview?.uptime ?? "Loading...";
   const hostname = overview?.hostname ?? "dgx-spark-local";
-  const status = overview?.status ?? "operational";
+  const systemStatus = overview?.status ?? "operational";
+  
+  // Show WebSocket connection status indicator
+  const wsStatusColor = isConnected ? 'bg-green-500' : status === 'connecting' ? 'bg-yellow-500' : 'bg-red-500';;
 
   return (
     <div className="space-y-6 pb-10">
@@ -425,8 +442,8 @@ export default function DashboardPage() {
       <SystemStatus 
         hostname={hostname} 
         uptime={uptime} 
-        status={status}
-        isLoading={overviewQuery.isLoading}
+        status={systemStatus}
+        isLoading={overviewQuery.isLoading && !isConnected}
       />
 
       {/* Stats Grid */}
@@ -438,7 +455,7 @@ export default function DashboardPage() {
           icon={Zap} 
           trend="up" 
           trendValue={gpuUtil > 0 ? "Active" : "Idle"} 
-          isLoading={overviewQuery.isLoading}
+          isLoading={overviewQuery.isLoading && !isConnected}
         />
         <StatCard 
           title="Active Workloads" 
@@ -463,7 +480,7 @@ export default function DashboardPage() {
           icon={Thermometer} 
           trend={gpuTemp > 65 ? "up" : "down"}
           trendValue={gpuTemp > 80 ? "Warning" : gpuTemp > 65 ? "Elevated" : "OK"}
-          isLoading={overviewQuery.isLoading}
+          isLoading={overviewQuery.isLoading && !isConnected}
         />
       </div>
 
@@ -477,7 +494,7 @@ export default function DashboardPage() {
             gpuPower={gpuPower}
             memUsed={memUsedGB}
             memTotal={Math.round(memTotalGB)}
-            isLoading={overviewQuery.isLoading}
+            isLoading={overviewQuery.isLoading && !isConnected}
           />
         </div>
 

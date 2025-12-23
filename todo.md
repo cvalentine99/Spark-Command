@@ -104,3 +104,17 @@
 - [x] NetworkPage - Connect to trpc.local.getNetwork, local.health
 - [x] SparkPage - Connect active jobs list to trpc.spark.getApplications, getJobHistory, getClusterResources
 - [x] JobDetailsPage - Connect to trpc.spark.getJobHistory, getJobStatus, killJob
+
+## Real-time WebSocket Updates
+- [x] Set up WebSocket server with ws library
+- [x] Create WebSocket message types and handlers
+- [x] Implement GPU metrics broadcasting (temperature, utilization, memory)
+- [x] Implement job status broadcasting (running, completed, failed)
+- [x] Create useWebSocket client hook
+- [x] Create WebSocketProvider context
+- [x] Update DashboardPage to use WebSocket for GPU metrics
+- [x] Update NodesPage to use WebSocket for hardware metrics
+- [x] Update SparkPage to use WebSocket for job status
+- [x] Update PowerPage to use WebSocket for power/temperature data
+- [x] Remove polling intervals from updated pages (polling reduced when WebSocket connected)
+- [x] Add reconnection logic and error handling (in WebSocketContext)

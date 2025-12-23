@@ -5,6 +5,7 @@ import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { trpc } from "@/lib/trpc";
+import { useWebSocketContext } from "@/contexts/WebSocketContext";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -76,9 +77,13 @@ export default function PowerPage() {
     action: () => void;
   }>({ open: false, title: "", description: "", action: () => {} });
 
-  // Fetch power state from backend
+  // Use WebSocket for real-time GPU metrics
+  const { gpuMetrics, isConnected } = useWebSocketContext();
+
+  // Fetch power state from backend (reduced polling when WebSocket connected)
   const powerStateQuery = trpc.power.getPowerState.useQuery(undefined, {
-    refetchInterval: 2000,
+    refetchInterval: isConnected ? false : 3000, // Only poll if WebSocket disconnected
+    enabled: !isConnected || !gpuMetrics,
   });
 
   // Fetch thermal profiles from backend
@@ -149,7 +154,18 @@ export default function PowerPage() {
     },
   });
 
-  const powerState = powerStateQuery.data?.state;
+  // Prefer WebSocket data for real-time metrics, fall back to API data
+  const apiPowerState = powerStateQuery.data?.state;
+  const powerState = gpuMetrics ? {
+    ...apiPowerState,
+    temperature: gpuMetrics.temperature,
+    powerDraw: gpuMetrics.powerDraw,
+    powerLimit: gpuMetrics.powerLimit || apiPowerState?.powerLimit || 250,
+    fanSpeed: gpuMetrics.fanSpeed,
+    fanMode: apiPowerState?.fanMode || 'auto',
+    utilization: gpuMetrics.utilization,
+  } : apiPowerState;
+  
   const thermalProfiles = profilesQuery.data?.profiles || [];
   const powerHistory = historyQuery.data?.history.map(p => ({
     time: new Date(p.timestamp).toLocaleTimeString(),

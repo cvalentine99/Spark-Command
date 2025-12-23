@@ -1,6 +1,7 @@
 import React from "react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { trpc } from "@/lib/trpc";
+import { useWebSocketContext } from "@/contexts/WebSocketContext";
 import { 
   Cpu, 
   Thermometer, 
@@ -230,9 +231,13 @@ const ProcessList = () => {
 };
 
 export default function NodesPage() {
-  // Fetch real metrics from backend
+  // Use WebSocket for real-time metrics
+  const { gpuMetrics, systemMetrics, isConnected } = useWebSocketContext();
+
+  // Fetch metrics from backend (reduced polling when WebSocket connected)
   const metricsQuery = trpc.local.getMetrics.useQuery(undefined, {
-    refetchInterval: 2000, // Refresh every 2 seconds
+    refetchInterval: isConnected ? false : 3000, // Only poll if WebSocket disconnected
+    enabled: !isConnected || !gpuMetrics,
   });
 
   const systemInfoQuery = trpc.local.getSystemInfo.useQuery(undefined, {
@@ -247,21 +252,25 @@ export default function NodesPage() {
   const systemInfo = systemInfoQuery.data;
   const health = healthQuery.data;
 
-  // Extract telemetry values
+  // Extract telemetry values - prefer WebSocket data when available
   const telemetry = {
-    cpuLoad: metrics?.cpu.usage ?? 0,
-    memoryUsed: metrics?.memory.used ? metrics.memory.used / (1024 * 1024 * 1024) : 0,
-    gpuUtil: metrics?.gpu.utilization ?? 0,
-    gpuTemp: metrics?.gpu.temperature ?? 0,
-    gpuPower: metrics?.gpu.powerDraw ?? 0,
-    fanSpeed: metrics?.gpu.fanSpeed ?? 0,
+    cpuLoad: systemMetrics?.cpu.usage ?? metrics?.cpu.usage ?? 0,
+    memoryUsed: systemMetrics?.memory.used 
+      ? systemMetrics.memory.used / (1024 * 1024 * 1024) 
+      : metrics?.memory.used 
+        ? metrics.memory.used / (1024 * 1024 * 1024) 
+        : 0,
+    gpuUtil: gpuMetrics?.utilization ?? metrics?.gpu.utilization ?? 0,
+    gpuTemp: gpuMetrics?.temperature ?? metrics?.gpu.temperature ?? 0,
+    gpuPower: gpuMetrics?.powerDraw ?? metrics?.gpu.powerDraw ?? 0,
+    fanSpeed: gpuMetrics?.fanSpeed ?? metrics?.gpu.fanSpeed ?? 0,
     nvmeUsed: metrics?.storage.devices[0] ? metrics.storage.devices[0].used / (1024 * 1024 * 1024 * 1024) : 0,
     nvmeTotal: metrics?.storage.devices[0] ? metrics.storage.devices[0].total / (1024 * 1024 * 1024 * 1024) : 2,
     networkRx: metrics?.network.interfaces[0]?.rxBytes ? metrics.network.interfaces[0].rxBytes / (1024 * 1024) : 0,
     networkTx: metrics?.network.interfaces[0]?.txBytes ? metrics.network.interfaces[0].txBytes / (1024 * 1024) : 0,
   };
 
-  const isLoading = metricsQuery.isLoading;
+  const isLoading = metricsQuery.isLoading && !isConnected;
   const isHealthy = health?.status === 'healthy';
 
   return (
