@@ -337,8 +337,8 @@ export default function NodesPage() {
         </div>
       </GlassCard>
 
-      {/* Main Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Main Content - Expands on ultrawide */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 grid-cols-ultrawide-4 grid-cols-superwide-4 grid-cols-megawide-5 gap-6 2xl:gap-8">
         {/* GB10 Visualizer */}
         <GlassCard className="lg:row-span-2">
           <h3 className="font-display font-bold text-lg mb-4 flex items-center gap-2">

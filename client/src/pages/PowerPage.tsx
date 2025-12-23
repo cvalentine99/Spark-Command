@@ -292,8 +292,8 @@ export default function PowerPage() {
         </Button>
       </div>
 
-      {/* Current Status */}
-      <div className="grid grid-cols-4 gap-4">
+      {/* Current Status - Expands on ultrawide */}
+      <div className="grid grid-cols-2 md:grid-cols-4 grid-cols-ultrawide-4 grid-cols-superwide-6 grid-cols-megawide-8 gap-4 2xl:gap-6">
         <GlassCard className="p-4">
           <div className="flex items-center gap-2 text-gray-400 text-sm mb-1">
             <Zap className="w-4 h-4" /> Power Draw
@@ -388,8 +388,8 @@ export default function PowerPage() {
         </GlassCard>
       </div>
 
-      {/* Main Controls */}
-      <div className="grid grid-cols-2 gap-6">
+      {/* Main Controls - Expands on ultrawide */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 grid-cols-ultrawide-4 grid-cols-superwide-4 gap-6 2xl:gap-8">
         {/* Power Limit Control */}
         <GlassCard className="p-6">
           <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
@@ -490,7 +490,7 @@ export default function PowerPage() {
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 grid-cols-ultrawide-4 grid-cols-superwide-6 gap-4">
             {thermalProfiles.map((profile) => (
               <div
                 key={profile.name}

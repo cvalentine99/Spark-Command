@@ -369,6 +369,50 @@ const StorageCard = () => {
   );
 };
 
+// Cluster Overview Card - Extra panel for ultrawide displays
+const ClusterOverviewCard = ({ clusterResources, isLoading }: { 
+  clusterResources: { totalCores: number; usedCores: number; totalMemory: string; usedMemory: string; workers: number; activeApplications: number; gpusAvailable: number; gpusInUse: number } | undefined;
+  isLoading: boolean;
+}) => (
+  <GlassCard>
+    <h3 className="font-display font-bold text-lg mb-4 flex items-center gap-2">
+      <Server className="h-5 w-5 text-primary" />
+      Cluster Resources
+      {isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground ml-2" />}
+    </h3>
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+          <div className="text-xs text-muted-foreground">CPU Cores</div>
+          <div className="text-xl font-mono font-bold">{clusterResources?.usedCores ?? 0}/{clusterResources?.totalCores ?? 0}</div>
+        </div>
+        <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+          <div className="text-xs text-muted-foreground">Workers</div>
+          <div className="text-xl font-mono font-bold">{clusterResources?.workers ?? 0}</div>
+        </div>
+      </div>
+      <div className="space-y-2">
+        <div className="flex justify-between text-sm">
+          <span className="text-muted-foreground">Memory Usage</span>
+          <span className="font-mono">{clusterResources?.usedMemory ?? '0 GB'} / {clusterResources?.totalMemory ?? '0 GB'}</span>
+        </div>
+        <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
+          <div className="h-full bg-primary transition-all duration-500" style={{ width: '55%' }} />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <div className="flex justify-between text-sm">
+          <span className="text-muted-foreground">GPUs Available</span>
+          <span className="font-mono">{clusterResources?.gpusInUse ?? 0} / {clusterResources?.gpusAvailable ?? 0} in use</span>
+        </div>
+        <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
+          <div className="h-full bg-green-500 transition-all duration-500" style={{ width: `${((clusterResources?.gpusInUse ?? 0) / (clusterResources?.gpusAvailable ?? 1)) * 100}%` }} />
+        </div>
+      </div>
+    </div>
+  </GlassCard>
+);
+
 // Format uptime from seconds
 function formatUptime(seconds: number): string {
   const days = Math.floor(seconds / 86400);
@@ -446,8 +490,8 @@ export default function DashboardPage() {
         isLoading={overviewQuery.isLoading && !isConnected}
       />
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Stats Grid - Expands on ultrawide */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 grid-cols-ultrawide-4 grid-cols-superwide-6 grid-cols-megawide-8 gap-4 2xl:gap-6">
         <StatCard 
           title="GPU Compute" 
           value="1000 TOPS" 
@@ -484,10 +528,10 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* GB10 Superchip - Takes 2 columns */}
-        <div className="lg:col-span-2">
+      {/* Main Content Grid - Expands on ultrawide */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 grid-cols-ultrawide-4 grid-cols-superwide-5 grid-cols-megawide-6 gap-6 2xl:gap-8">
+        {/* GB10 Superchip - Takes 2 columns, more on ultrawide */}
+        <div className="lg:col-span-2 [&]:[@media(min-width:1920px)]:col-span-2 [&]:[@media(min-width:2560px)]:col-span-3 [&]:[@media(min-width:3440px)]:col-span-3">
           <GB10SuperchipCard 
             gpuUtil={gpuUtil}
             gpuTemp={gpuTemp}
@@ -501,13 +545,18 @@ export default function DashboardPage() {
         {/* Quick Actions */}
         <QuickActionsCard />
 
-        {/* Recent Activity */}
-        <div className="lg:col-span-2">
+        {/* Recent Activity - Takes more columns on ultrawide */}
+        <div className="lg:col-span-2 [&]:[@media(min-width:1920px)]:col-span-2 [&]:[@media(min-width:2560px)]:col-span-2 [&]:[@media(min-width:3440px)]:col-span-3">
           <RecentActivityCard />
         </div>
 
         {/* Storage */}
         <StorageCard />
+
+        {/* Additional panels for ultrawide - show cluster overview */}
+        <div className="hidden [@media(min-width:2560px)]:block">
+          <ClusterOverviewCard clusterResources={clusterResources} isLoading={clusterResourcesQuery.isLoading} />
+        </div>
       </div>
     </div>
   );

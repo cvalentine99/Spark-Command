@@ -209,8 +209,8 @@ export default function NetworkPage() {
         </div>
       </div>
 
-      {/* Stats Overview */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* Stats Overview - Expands on ultrawide */}
+      <div className="grid grid-cols-2 md:grid-cols-4 grid-cols-ultrawide-4 grid-cols-superwide-6 grid-cols-megawide-8 gap-4 2xl:gap-6">
         <GlassCard className="text-center">
           <ArrowDown className="h-5 w-5 text-blue-400 mx-auto mb-2" />
           {isLoading ? (
@@ -245,9 +245,9 @@ export default function NetworkPage() {
         </GlassCard>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Bandwidth Chart */}
-        <GlassCard className="lg:col-span-2">
+      <div className="grid grid-cols-1 lg:grid-cols-3 grid-cols-ultrawide-4 grid-cols-superwide-5 grid-cols-megawide-6 gap-6 2xl:gap-8">
+        {/* Bandwidth Chart - Takes more columns on ultrawide */}
+        <GlassCard className="lg:col-span-2 [&]:[@media(min-width:1920px)]:col-span-2 [&]:[@media(min-width:2560px)]:col-span-3 [&]:[@media(min-width:3440px)]:col-span-4">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-display font-bold flex items-center gap-2">
               <Activity className="h-5 w-5 text-primary" /> Real-Time Bandwidth
@@ -308,7 +308,7 @@ export default function NetworkPage() {
               <p>No network interfaces found</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 grid-cols-ultrawide-4 grid-cols-superwide-4 gap-4">
               {interfaces.map((iface) => (
                 <InterfaceStat 
                   key={iface.name}
@@ -340,7 +340,7 @@ export default function NetworkPage() {
         <h2 className="text-lg font-display font-bold mb-4 flex items-center gap-2">
           <Server className="h-5 w-5 text-primary" /> Local Services
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 grid-cols-ultrawide-6 grid-cols-superwide-8 gap-4">
           {[
             { name: "Command Center", port: 3000, status: "running" },
             { name: "DCGM Exporter", port: 9400, status: "running" },

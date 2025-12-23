@@ -522,8 +522,8 @@ export default function SparkPage() {
         </Dialog>
       </div>
 
-      {/* Top Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Top Metrics - Expands on ultrawide */}
+      <div className="grid grid-cols-1 md:grid-cols-4 grid-cols-ultrawide-4 grid-cols-superwide-6 grid-cols-megawide-8 gap-4 2xl:gap-6">
         <GlassCard className="flex items-center gap-4">
           <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
             <Zap className="h-6 w-6 text-primary" />
@@ -665,8 +665,8 @@ export default function SparkPage() {
         </div>
       </GlassCard>
 
-      {/* Job History and Executor Distribution */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Job History and Executor Distribution - Expands on ultrawide */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 grid-cols-ultrawide-4 grid-cols-superwide-4 gap-6 2xl:gap-8">
         <GlassCard>
           <h2 className="text-lg font-display font-bold mb-4 flex items-center gap-2">
             <Clock className="h-4 w-4 text-muted-foreground" /> Job History

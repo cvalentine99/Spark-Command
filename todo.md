@@ -118,3 +118,14 @@
 - [x] Update PowerPage to use WebSocket for power/temperature data
 - [x] Remove polling intervals from updated pages (polling reduced when WebSocket connected)
 - [x] Add reconnection logic and error handling (in WebSocketContext)
+
+## Ultrawide Monitor Support
+- [x] Add ultrawide breakpoints (2xl: 1536px, 3xl: 1920px, 4xl: 2560px, 5xl: 3440px)
+- [x] Update DashboardPage grid to use more columns on ultrawide
+- [x] Update NodesPage (Hardware) layout for ultrawide
+- [x] Update SparkPage layout for ultrawide
+- [x] Update NetworkPage layout for ultrawide
+- [x] Update LogsPage layout for ultrawide
+- [x] Update PowerPage layout for ultrawide
+- [x] Update MainLayout content max-width for ultrawide
+- [x] Add container queries for better component scaling
