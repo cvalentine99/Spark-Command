@@ -94,3 +94,13 @@
 - [x] Add UI for backup/restore in Settings page
 - [x] Include alert rules, integrations, and preferences in backup
 - [x] Add backup history and versioning
+
+## Frontend-Backend API Connections
+- [x] DashboardPage - Connect to trpc.local.getOverview and spark.getClusterResources
+- [x] NodesPage (Hardware) - Connect to trpc.local.getMetrics, getSystemInfo, getProcesses
+- [x] LogsPage - Connect to trpc.logs.getLogs, getServices, getStats
+- [x] PowerPage - Connect to trpc.power.getPowerState, setPowerLimit, setFanSpeed, getThermalProfiles
+- [x] BackupPage - Connect to trpc.config.getConfig, exportConfig, importConfig, listBackups, createBackup, restoreBackup, deleteBackup, resetToDefaults
+- [x] NetworkPage - Connect to trpc.local.getNetwork, local.health
+- [x] SparkPage - Connect active jobs list to trpc.spark.getApplications, getJobHistory, getClusterResources
+- [x] JobDetailsPage - Connect to trpc.spark.getJobHistory, getJobStatus, killJob

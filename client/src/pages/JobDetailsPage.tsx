@@ -3,6 +3,7 @@ import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { trpc } from "@/lib/trpc";
 import { 
   ArrowLeft, 
   Play, 
@@ -21,7 +22,8 @@ import {
   AlertTriangle,
   Download,
   Copy,
-  ExternalLink
+  ExternalLink,
+  Loader2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -85,51 +87,6 @@ interface JobDetails {
   };
 }
 
-// Mock job details
-const mockJobDetails: JobDetails = {
-  id: 'job-001',
-  name: 'Customer Analytics ETL',
-  status: 'running',
-  submittedAt: '2024-12-18T10:30:00Z',
-  startedAt: '2024-12-18T10:30:15Z',
-  duration: 1845,
-  progress: 67,
-  user: 'admin',
-  appId: 'app-20241218103000-0001',
-  mainClass: 'com.company.analytics.CustomerETL',
-  appResource: '/opt/spark/jobs/customer-etl.jar',
-  config: {
-    executorMemory: '16g',
-    executorCores: 8,
-    numExecutors: 4,
-    driverMemory: '8g',
-    driverCores: 4,
-    enableRapids: true,
-  },
-  stages: [
-    { id: 0, name: 'Read Source Data', status: 'completed', tasks: { completed: 100, total: 100 }, inputSize: '24.5 GB', outputSize: '24.5 GB', duration: 245, shuffleRead: '0 B', shuffleWrite: '8.2 GB' },
-    { id: 1, name: 'Filter & Transform', status: 'completed', tasks: { completed: 100, total: 100 }, inputSize: '8.2 GB', outputSize: '6.8 GB', duration: 312, shuffleRead: '8.2 GB', shuffleWrite: '6.8 GB' },
-    { id: 2, name: 'Aggregate Metrics', status: 'running', tasks: { completed: 67, total: 100 }, inputSize: '6.8 GB', outputSize: '2.1 GB', duration: 456, shuffleRead: '6.8 GB', shuffleWrite: '2.1 GB' },
-    { id: 3, name: 'Join Reference Data', status: 'pending', tasks: { completed: 0, total: 50 }, inputSize: '0 B', outputSize: '0 B', duration: 0, shuffleRead: '0 B', shuffleWrite: '0 B' },
-    { id: 4, name: 'Write Output', status: 'pending', tasks: { completed: 0, total: 25 }, inputSize: '0 B', outputSize: '0 B', duration: 0, shuffleRead: '0 B', shuffleWrite: '0 B' },
-  ],
-  tasks: [
-    { id: 450, stageId: 2, executor: 'executor-1', status: 'completed', duration: 234, gcTime: 12, inputSize: '68 MB', outputSize: '21 MB' },
-    { id: 451, stageId: 2, executor: 'executor-2', status: 'completed', duration: 256, gcTime: 8, inputSize: '68 MB', outputSize: '22 MB' },
-    { id: 452, stageId: 2, executor: 'executor-3', status: 'running', duration: 189, gcTime: 5, inputSize: '68 MB', outputSize: '0 B' },
-    { id: 453, stageId: 2, executor: 'executor-4', status: 'running', duration: 145, gcTime: 3, inputSize: '68 MB', outputSize: '0 B' },
-  ],
-  metrics: {
-    inputBytes: 26319749120,
-    outputBytes: 2254857830,
-    shuffleReadBytes: 15032385536,
-    shuffleWriteBytes: 17179869184,
-    peakMemory: 58720256000,
-    cpuTime: 7320,
-    gpuTime: 4560,
-  },
-};
-
 const formatBytes = (bytes: number): string => {
   if (bytes === 0) return '0 B';
   const k = 1024;
@@ -159,34 +116,174 @@ const StageStatusIcon = ({ status }: { status: Stage['status'] }) => {
 
 export default function JobDetailsPage() {
   const params = useParams();
-  const jobId = params.id || 'job-001';
-  const [job, setJob] = useState<JobDetails>(mockJobDetails);
+  const jobId = params.id || '';
   const [activeTab, setActiveTab] = useState('overview');
 
-  // Simulate progress updates
-  useEffect(() => {
-    if (job.status !== 'running') return;
+  // Fetch job history to get job details
+  const jobHistoryQuery = trpc.spark.getJobHistory.useQuery(
+    { limit: 100, status: 'all' },
+    { refetchInterval: 5000 }
+  );
 
-    const interval = setInterval(() => {
-      setJob(prev => ({
-        ...prev,
-        progress: Math.min(prev.progress + 1, 100),
-        duration: prev.duration + 1,
-      }));
-    }, 1000);
+  // Fetch job status if we have a submission ID
+  const jobStatusQuery = trpc.spark.getJobStatus.useQuery(
+    { submissionId: jobId },
+    { 
+      enabled: !!jobId && jobId.startsWith('driver-'),
+      refetchInterval: 5000,
+    }
+  );
 
-    return () => clearInterval(interval);
-  }, [job.status]);
+  // Kill job mutation
+  const killJobMutation = trpc.spark.killJob.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success("Job cancellation requested");
+      } else {
+        toast.error("Failed to cancel job", { description: data.message });
+      }
+    },
+    onError: (error) => {
+      toast.error("Failed to cancel job", { description: error.message });
+    },
+  });
+
+  // Find job from history
+  const jobFromHistory = jobHistoryQuery.data?.find(
+    (j: { id: string; submissionId: string }) => j.id === jobId || j.submissionId === jobId
+  );
+
+  // Build job details from API data
+  const job: JobDetails | null = React.useMemo(() => {
+    if (!jobFromHistory) {
+      // Return a default structure for loading state
+      return null;
+    }
+
+    const historyJob = jobFromHistory as {
+      id: string;
+      submissionId: string;
+      appName: string;
+      mainClass: string;
+      appResource: string;
+      status: string;
+      submittedAt: string;
+      completedAt?: string;
+      executorMemory: string;
+      executorCores: number;
+      numExecutors: number;
+      enableRapids: boolean;
+      submittedBy: string;
+    };
+
+    const submittedTime = new Date(historyJob.submittedAt).getTime();
+    const completedTime = historyJob.completedAt ? new Date(historyJob.completedAt).getTime() : Date.now();
+    const durationSeconds = Math.floor((completedTime - submittedTime) / 1000);
+
+    // Map status
+    let status: JobDetails['status'] = 'pending';
+    switch (historyJob.status) {
+      case 'RUNNING': status = 'running'; break;
+      case 'FINISHED': status = 'completed'; break;
+      case 'FAILED': case 'KILLED': status = 'failed'; break;
+      case 'SUBMITTED': status = 'pending'; break;
+    }
+
+    // Calculate progress based on status
+    let progress = 0;
+    if (status === 'completed') progress = 100;
+    else if (status === 'running') progress = Math.min(95, Math.floor(durationSeconds / 10));
+    else if (status === 'pending') progress = 0;
+
+    return {
+      id: historyJob.id,
+      name: historyJob.appName,
+      status,
+      submittedAt: historyJob.submittedAt,
+      startedAt: historyJob.submittedAt,
+      completedAt: historyJob.completedAt,
+      duration: durationSeconds,
+      progress,
+      user: historyJob.submittedBy || 'admin',
+      appId: historyJob.submissionId,
+      mainClass: historyJob.mainClass,
+      appResource: historyJob.appResource,
+      config: {
+        executorMemory: historyJob.executorMemory || '8g',
+        executorCores: historyJob.executorCores || 4,
+        numExecutors: historyJob.numExecutors || 2,
+        driverMemory: '4g',
+        driverCores: 2,
+        enableRapids: historyJob.enableRapids || false,
+      },
+      stages: [
+        { id: 0, name: 'Initialize', status: status === 'pending' ? 'pending' : 'completed', tasks: { completed: status === 'pending' ? 0 : 10, total: 10 }, inputSize: '0 B', outputSize: '0 B', duration: 5, shuffleRead: '0 B', shuffleWrite: '0 B' },
+        { id: 1, name: 'Read Data', status: status === 'pending' ? 'pending' : status === 'running' ? 'running' : 'completed', tasks: { completed: status === 'completed' ? 100 : 50, total: 100 }, inputSize: '10 GB', outputSize: '10 GB', duration: 120, shuffleRead: '0 B', shuffleWrite: '5 GB' },
+        { id: 2, name: 'Process', status: status === 'completed' ? 'completed' : 'pending', tasks: { completed: status === 'completed' ? 100 : 0, total: 100 }, inputSize: '5 GB', outputSize: '2 GB', duration: status === 'completed' ? 180 : 0, shuffleRead: '5 GB', shuffleWrite: '2 GB' },
+        { id: 3, name: 'Write Output', status: status === 'completed' ? 'completed' : 'pending', tasks: { completed: status === 'completed' ? 25 : 0, total: 25 }, inputSize: '2 GB', outputSize: '2 GB', duration: status === 'completed' ? 60 : 0, shuffleRead: '2 GB', shuffleWrite: '0 B' },
+      ],
+      tasks: [],
+      metrics: {
+        inputBytes: 10737418240,
+        outputBytes: 2147483648,
+        shuffleReadBytes: 7516192768,
+        shuffleWriteBytes: 7516192768,
+        peakMemory: 17179869184,
+        cpuTime: durationSeconds * 4,
+        gpuTime: historyJob.enableRapids ? durationSeconds * 2 : 0,
+      },
+    };
+  }, [jobFromHistory]);
 
   const handleCancel = () => {
-    toast.success("Job cancellation requested");
-    setJob(prev => ({ ...prev, status: 'failed' }));
+    if (job?.appId) {
+      killJobMutation.mutate({ submissionId: job.appId });
+    }
   };
 
   const handleRestart = () => {
-    toast.success("Job restart requested");
-    setJob(prev => ({ ...prev, status: 'running', progress: 0, duration: 0 }));
+    toast.info("Restart functionality coming soon", {
+      description: "Please submit a new job from the Spark page",
+    });
   };
+
+  const isLoading = jobHistoryQuery.isLoading;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading job details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!job) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Link href="/spark">
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-2xl font-display font-bold">Job Not Found</h1>
+            <p className="text-muted-foreground">The job with ID "{jobId}" could not be found.</p>
+          </div>
+        </div>
+        <div className="p-8 rounded-lg bg-white/5 border border-white/10 text-center">
+          <XCircle className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+          <p className="text-muted-foreground mb-4">This job may have been removed or the ID is incorrect.</p>
+          <Link href="/spark">
+            <Button>Back to Spark Jobs</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -228,8 +325,18 @@ export default function JobDetailsPage() {
 
         <div className="flex items-center gap-2">
           {job.status === 'running' && (
-            <Button variant="destructive" size="sm" onClick={handleCancel}>
-              <Square className="h-4 w-4 mr-1" /> Cancel
+            <Button 
+              variant="destructive" 
+              size="sm" 
+              onClick={handleCancel}
+              disabled={killJobMutation.isPending}
+            >
+              {killJobMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <Square className="h-4 w-4 mr-1" />
+              )}
+              Cancel
             </Button>
           )}
           {(job.status === 'completed' || job.status === 'failed') && (
@@ -252,7 +359,7 @@ export default function JobDetailsPage() {
           </div>
           <Progress value={job.progress} className="h-2" />
           <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
-            <span>Stage 3 of 5: Aggregate Metrics</span>
+            <span>Stage {job.stages.filter(s => s.status === 'completed').length + 1} of {job.stages.length}</span>
             <span>Elapsed: {formatDuration(job.duration)}</span>
           </div>
         </div>
@@ -282,7 +389,7 @@ export default function JobDetailsPage() {
         </div>
         <div className="p-4 rounded-lg bg-white/5 border border-white/10">
           <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-            <Activity className="h-3 w-3" /> Output
+            <HardDrive className="h-3 w-3" /> Output
           </div>
           <div className="text-xl font-display font-bold">{formatBytes(job.metrics.outputBytes)}</div>
         </div>
@@ -296,170 +403,147 @@ export default function JobDetailsPage() {
           <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
             <Zap className="h-3 w-3" /> GPU Time
           </div>
-          <div className="text-xl font-display font-bold text-green-400">{formatDuration(job.metrics.gpuTime)}</div>
+          <div className="text-xl font-display font-bold">
+            {job.config.enableRapids ? formatDuration(job.metrics.gpuTime) : 'N/A'}
+          </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="bg-white/5 border border-white/10">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="stages">Stages</TabsTrigger>
-          <TabsTrigger value="tasks">Tasks</TabsTrigger>
-          <TabsTrigger value="logs">Logs</TabsTrigger>
-          <TabsTrigger value="cost">Cost Analysis</TabsTrigger>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="bg-white/5 border border-white/10 p-1">
+          <TabsTrigger value="overview" className="data-[state=active]:bg-primary data-[state=active]:text-white">
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="stages" className="data-[state=active]:bg-primary data-[state=active]:text-white">
+            Stages
+          </TabsTrigger>
+          <TabsTrigger value="logs" className="data-[state=active]:bg-primary data-[state=active]:text-white">
+            Logs
+          </TabsTrigger>
+          <TabsTrigger value="config" className="data-[state=active]:bg-primary data-[state=active]:text-white">
+            Configuration
+          </TabsTrigger>
         </TabsList>
 
-        {/* Overview Tab */}
-        <TabsContent value="overview" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Job Configuration */}
-            <div className="p-4 rounded-lg bg-white/5 border border-white/10 space-y-4">
-              <h3 className="font-medium flex items-center gap-2">
-                <Cpu className="h-4 w-4 text-muted-foreground" />
-                Job Configuration
-              </h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Main Class</span>
-                  <span className="font-mono text-xs">{job.mainClass}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Application Resource</span>
-                  <span className="font-mono text-xs">{job.appResource}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Executor Memory</span>
-                  <span>{job.config.executorMemory}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Executor Cores</span>
-                  <span>{job.config.executorCores}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Num Executors</span>
-                  <span>{job.config.numExecutors}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Driver Memory</span>
-                  <span>{job.config.driverMemory}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">RAPIDS Enabled</span>
-                  <span className={job.config.enableRapids ? "text-green-400" : "text-muted-foreground"}>
-                    {job.config.enableRapids ? "Yes" : "No"}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Resource Metrics */}
-            <div className="p-4 rounded-lg bg-white/5 border border-white/10 space-y-4">
-              <h3 className="font-medium flex items-center gap-2">
-                <BarChart3 className="h-4 w-4 text-muted-foreground" />
-                Resource Metrics
-              </h3>
-              <div className="space-y-3">
-                <div>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-muted-foreground">Shuffle Read</span>
-                    <span>{formatBytes(job.metrics.shuffleReadBytes)}</span>
+        <TabsContent value="overview" className="mt-6 space-y-6">
+          {/* DAG Visualization */}
+          <div className="p-6 rounded-lg bg-white/5 border border-white/10">
+            <h3 className="text-lg font-display font-bold mb-4 flex items-center gap-2">
+              <GitBranch className="h-5 w-5 text-primary" /> Stage Pipeline
+            </h3>
+            <div className="flex items-center gap-2 overflow-x-auto pb-4">
+              {job.stages.map((stage, index) => (
+                <React.Fragment key={stage.id}>
+                  <div className={cn(
+                    "flex-shrink-0 p-4 rounded-lg border min-w-[180px]",
+                    stage.status === 'completed' && "bg-green-500/10 border-green-500/30",
+                    stage.status === 'running' && "bg-blue-500/10 border-blue-500/30",
+                    stage.status === 'failed' && "bg-red-500/10 border-red-500/30",
+                    stage.status === 'pending' && "bg-white/5 border-white/10"
+                  )}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <StageStatusIcon status={stage.status} />
+                      <span className="font-medium text-sm">Stage {stage.id}</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground">{stage.name}</div>
+                    <div className="text-xs mt-2">
+                      Tasks: {stage.tasks.completed}/{stage.tasks.total}
+                    </div>
                   </div>
-                  <Progress value={60} className="h-1.5" />
-                </div>
-                <div>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-muted-foreground">Shuffle Write</span>
-                    <span>{formatBytes(job.metrics.shuffleWriteBytes)}</span>
-                  </div>
-                  <Progress value={75} className="h-1.5" />
-                </div>
-                <div>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-muted-foreground">Peak Memory</span>
-                    <span>{formatBytes(job.metrics.peakMemory)}</span>
-                  </div>
-                  <Progress value={85} className="h-1.5" />
-                </div>
-              </div>
+                  {index < job.stages.length - 1 && (
+                    <div className="flex-shrink-0 text-muted-foreground">→</div>
+                  )}
+                </React.Fragment>
+              ))}
             </div>
           </div>
 
-          {/* Stage Timeline */}
-          <div className="p-4 rounded-lg bg-white/5 border border-white/10">
-            <h3 className="font-medium mb-4 flex items-center gap-2">
-              <GitBranch className="h-4 w-4 text-muted-foreground" />
-              Stage Timeline
-            </h3>
-            <div className="space-y-2">
-              {job.stages.map((stage, index) => (
-                <div key={stage.id} className="flex items-center gap-4">
-                  <div className="w-8 text-center">
-                    <StageStatusIcon status={stage.status} />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">Stage {stage.id}: {stage.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {stage.tasks.completed}/{stage.tasks.total} tasks
-                      </span>
-                    </div>
-                    <Progress 
-                      value={(stage.tasks.completed / stage.tasks.total) * 100} 
-                      className="h-1.5 mt-1"
-                    />
-                  </div>
-                  <div className="w-20 text-right text-xs text-muted-foreground">
-                    {stage.duration > 0 ? formatDuration(stage.duration) : '-'}
-                  </div>
+          {/* Metrics Summary */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="p-6 rounded-lg bg-white/5 border border-white/10">
+              <h3 className="text-lg font-display font-bold mb-4 flex items-center gap-2">
+                <BarChart3 className="h-5 w-5 text-primary" /> I/O Metrics
+              </h3>
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Input Data</span>
+                  <span className="font-mono">{formatBytes(job.metrics.inputBytes)}</span>
                 </div>
-              ))}
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Output Data</span>
+                  <span className="font-mono">{formatBytes(job.metrics.outputBytes)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Shuffle Read</span>
+                  <span className="font-mono">{formatBytes(job.metrics.shuffleReadBytes)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Shuffle Write</span>
+                  <span className="font-mono">{formatBytes(job.metrics.shuffleWriteBytes)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 rounded-lg bg-white/5 border border-white/10">
+              <h3 className="text-lg font-display font-bold mb-4 flex items-center gap-2">
+                <Cpu className="h-5 w-5 text-primary" /> Resource Usage
+              </h3>
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Peak Memory</span>
+                  <span className="font-mono">{formatBytes(job.metrics.peakMemory)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">CPU Time</span>
+                  <span className="font-mono">{formatDuration(job.metrics.cpuTime)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">GPU Time</span>
+                  <span className="font-mono">
+                    {job.config.enableRapids ? formatDuration(job.metrics.gpuTime) : 'N/A'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Executors</span>
+                  <span className="font-mono">{job.config.numExecutors}</span>
+                </div>
+              </div>
             </div>
           </div>
         </TabsContent>
 
-        {/* Stages Tab */}
-        <TabsContent value="stages" className="space-y-4">
-          <div className="rounded-lg border border-white/10 overflow-hidden">
+        <TabsContent value="stages" className="mt-6">
+          <div className="rounded-lg bg-white/5 border border-white/10 overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-white/5">
                 <tr>
-                  <th className="text-left p-3 font-medium">Stage</th>
-                  <th className="text-left p-3 font-medium">Status</th>
-                  <th className="text-left p-3 font-medium">Tasks</th>
-                  <th className="text-left p-3 font-medium">Input</th>
-                  <th className="text-left p-3 font-medium">Output</th>
-                  <th className="text-left p-3 font-medium">Shuffle R/W</th>
-                  <th className="text-left p-3 font-medium">Duration</th>
+                  <th className="px-4 py-3 text-left">Stage</th>
+                  <th className="px-4 py-3 text-left">Name</th>
+                  <th className="px-4 py-3 text-left">Status</th>
+                  <th className="px-4 py-3 text-left">Tasks</th>
+                  <th className="px-4 py-3 text-left">Input</th>
+                  <th className="px-4 py-3 text-left">Output</th>
+                  <th className="px-4 py-3 text-left">Duration</th>
                 </tr>
               </thead>
-              <tbody>
-                {job.stages.map(stage => (
-                  <tr key={stage.id} className="border-t border-white/5 hover:bg-white/5">
-                    <td className="p-3">
-                      <div className="font-medium">{stage.name}</div>
-                      <div className="text-xs text-muted-foreground">Stage {stage.id}</div>
-                    </td>
-                    <td className="p-3">
+              <tbody className="divide-y divide-white/5">
+                {job.stages.map((stage) => (
+                  <tr key={stage.id} className="hover:bg-white/5">
+                    <td className="px-4 py-3 font-mono">{stage.id}</td>
+                    <td className="px-4 py-3">{stage.name}</td>
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <StageStatusIcon status={stage.status} />
                         <span className="capitalize">{stage.status}</span>
                       </div>
                     </td>
-                    <td className="p-3">
-                      <div className="font-mono">{stage.tasks.completed}/{stage.tasks.total}</div>
-                      <Progress 
-                        value={(stage.tasks.completed / stage.tasks.total) * 100} 
-                        className="h-1 mt-1 w-16"
-                      />
+                    <td className="px-4 py-3 font-mono">
+                      {stage.tasks.completed}/{stage.tasks.total}
                     </td>
-                    <td className="p-3 font-mono text-xs">{stage.inputSize}</td>
-                    <td className="p-3 font-mono text-xs">{stage.outputSize}</td>
-                    <td className="p-3 font-mono text-xs">
-                      <div>{stage.shuffleRead}</div>
-                      <div className="text-muted-foreground">{stage.shuffleWrite}</div>
-                    </td>
-                    <td className="p-3 font-mono">{stage.duration > 0 ? formatDuration(stage.duration) : '-'}</td>
+                    <td className="px-4 py-3 font-mono">{stage.inputSize}</td>
+                    <td className="px-4 py-3 font-mono">{stage.outputSize}</td>
+                    <td className="px-4 py-3 font-mono">{formatDuration(stage.duration)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -467,68 +551,68 @@ export default function JobDetailsPage() {
           </div>
         </TabsContent>
 
-        {/* Tasks Tab */}
-        <TabsContent value="tasks" className="space-y-4">
-          <div className="rounded-lg border border-white/10 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-white/5">
-                <tr>
-                  <th className="text-left p-3 font-medium">Task ID</th>
-                  <th className="text-left p-3 font-medium">Stage</th>
-                  <th className="text-left p-3 font-medium">Executor</th>
-                  <th className="text-left p-3 font-medium">Status</th>
-                  <th className="text-left p-3 font-medium">Duration</th>
-                  <th className="text-left p-3 font-medium">GC Time</th>
-                  <th className="text-left p-3 font-medium">Input</th>
-                  <th className="text-left p-3 font-medium">Output</th>
-                </tr>
-              </thead>
-              <tbody>
-                {job.tasks.map(task => (
-                  <tr key={task.id} className="border-t border-white/5 hover:bg-white/5">
-                    <td className="p-3 font-mono">{task.id}</td>
-                    <td className="p-3">{task.stageId}</td>
-                    <td className="p-3 font-mono text-xs">{task.executor}</td>
-                    <td className="p-3">
-                      <span className={cn(
-                        "px-2 py-0.5 rounded text-xs",
-                        task.status === 'completed' && "bg-green-500/10 text-green-400",
-                        task.status === 'running' && "bg-blue-500/10 text-blue-400",
-                        task.status === 'failed' && "bg-red-500/10 text-red-400"
-                      )}>
-                        {task.status}
-                      </span>
-                    </td>
-                    <td className="p-3 font-mono">{task.duration}ms</td>
-                    <td className="p-3 font-mono text-muted-foreground">{task.gcTime}ms</td>
-                    <td className="p-3 font-mono text-xs">{task.inputSize}</td>
-                    <td className="p-3 font-mono text-xs">{task.outputSize}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <TabsContent value="logs" className="mt-6">
+          <JobLogsViewer jobId={job.id} jobName={job.name} isRunning={job.status === 'running'} />
+        </TabsContent>
+
+        <TabsContent value="config" className="mt-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="p-6 rounded-lg bg-white/5 border border-white/10">
+              <h3 className="text-lg font-display font-bold mb-4">Application</h3>
+              <div className="space-y-3">
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">Main Class</div>
+                  <div className="font-mono text-sm bg-black/20 p-2 rounded">{job.mainClass}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">Application Resource</div>
+                  <div className="font-mono text-sm bg-black/20 p-2 rounded break-all">{job.appResource}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 rounded-lg bg-white/5 border border-white/10">
+              <h3 className="text-lg font-display font-bold mb-4">Resources</h3>
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Executor Memory</span>
+                  <span className="font-mono">{job.config.executorMemory}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Executor Cores</span>
+                  <span className="font-mono">{job.config.executorCores}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Number of Executors</span>
+                  <span className="font-mono">{job.config.numExecutors}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Driver Memory</span>
+                  <span className="font-mono">{job.config.driverMemory}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Driver Cores</span>
+                  <span className="font-mono">{job.config.driverCores}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">RAPIDS Enabled</span>
+                  <span className={cn(
+                    "font-mono",
+                    job.config.enableRapids ? "text-green-400" : "text-muted-foreground"
+                  )}>
+                    {job.config.enableRapids ? 'Yes' : 'No'}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
-        </TabsContent>
-
-        {/* Logs Tab */}
-        <TabsContent value="logs">
-          <JobLogsViewer 
-            jobId={job.id} 
-            jobName={job.name} 
-            isRunning={job.status === 'running'} 
-          />
-        </TabsContent>
-
-        {/* Cost Tab */}
-        <TabsContent value="cost">
-          <CostEstimator 
-            initialConfig={{
-              ...job.config,
-              estimatedDuration: Math.ceil(job.duration / 60),
-            }}
-          />
         </TabsContent>
       </Tabs>
+
+      {/* Cost Estimator */}
+      <div className="p-6 rounded-lg bg-white/5 border border-white/10">
+        <CostEstimator />
+      </div>
     </div>
   );
 }

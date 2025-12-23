@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { trpc } from "@/lib/trpc";
 import {
   Dialog,
   DialogContent,
@@ -38,143 +39,11 @@ import {
   Shield,
   Zap,
   Bell,
+  Loader2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-
-// Types
-interface Config {
-  version: string;
-  exportedAt: string;
-  system: {
-    hostname?: string;
-    timezone?: string;
-  };
-  monitoring: {
-    prometheusUrl?: string;
-    grafanaUrl?: string;
-    refreshInterval?: number;
-  };
-  alerts: {
-    enabled: boolean;
-    rules: {
-      id: string;
-      name: string;
-      condition: string;
-      threshold: number;
-      severity: "critical" | "warning" | "info";
-      enabled: boolean;
-    }[];
-  };
-  integrations: {
-    pagerduty: { enabled: boolean; serviceKey?: string };
-    slack: { enabled: boolean; webhookUrl?: string; channel?: string };
-    splunk: { enabled: boolean; host?: string; token?: string };
-  };
-  spark: {
-    masterUrl?: string;
-    defaultExecutorMemory?: string;
-    defaultExecutorCores?: number;
-    rapidsEnabled?: boolean;
-  };
-  power: {
-    defaultProfile?: string;
-    customPowerLimit?: number;
-  };
-  ui: {
-    theme?: "dark" | "light";
-    refreshRate?: number;
-    showDebugInfo?: boolean;
-  };
-}
-
-interface Backup {
-  filename: string;
-  createdAt: string;
-  size: number;
-}
-
-// Default config
-const defaultConfig: Config = {
-  version: "1.0.0",
-  exportedAt: new Date().toISOString(),
-  system: {
-    hostname: "dgx-spark-01",
-    timezone: "UTC",
-  },
-  monitoring: {
-    prometheusUrl: "http://localhost:9090",
-    grafanaUrl: "http://localhost:3001",
-    refreshInterval: 5000,
-  },
-  alerts: {
-    enabled: true,
-    rules: [
-      {
-        id: "gpu-temp-critical",
-        name: "GPU Temperature Critical",
-        condition: "temperature > threshold",
-        threshold: 85,
-        severity: "critical",
-        enabled: true,
-      },
-      {
-        id: "gpu-temp-warning",
-        name: "GPU Temperature Warning",
-        condition: "temperature > threshold",
-        threshold: 75,
-        severity: "warning",
-        enabled: true,
-      },
-      {
-        id: "gpu-memory-high",
-        name: "GPU Memory Usage High",
-        condition: "memory_used_percent > threshold",
-        threshold: 90,
-        severity: "warning",
-        enabled: true,
-      },
-    ],
-  },
-  integrations: {
-    pagerduty: { enabled: false },
-    slack: { enabled: false },
-    splunk: { enabled: false },
-  },
-  spark: {
-    masterUrl: "spark://localhost:7077",
-    defaultExecutorMemory: "8g",
-    defaultExecutorCores: 4,
-    rapidsEnabled: true,
-  },
-  power: {
-    defaultProfile: "Balanced",
-  },
-  ui: {
-    theme: "dark",
-    refreshRate: 5000,
-    showDebugInfo: false,
-  },
-};
-
-// Simulated backups
-const initialBackups: Backup[] = [
-  {
-    filename: "backup-2024-12-22T10-30-00.json",
-    createdAt: "2024-12-22T10:30:00Z",
-    size: 2456,
-  },
-  {
-    filename: "backup-2024-12-21T15-45-00.json",
-    createdAt: "2024-12-21T15:45:00Z",
-    size: 2389,
-  },
-  {
-    filename: "pre-update-2024-12-20.json",
-    createdAt: "2024-12-20T09:00:00Z",
-    size: 2512,
-  },
-];
+import { cn } from "@/lib/utils";
 
 // Format file size
 function formatSize(bytes: number): string {
@@ -205,126 +74,167 @@ function ConfigSection({
 }
 
 export default function BackupPage() {
-  const [config, setConfig] = useState<Config>(defaultConfig);
-  const [backups, setBackups] = useState<Backup[]>(initialBackups);
   const [importJson, setImportJson] = useState("");
   const [backupName, setBackupName] = useState("");
-  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [validationErrors, setValidationErrors] = useState<{ path: string; message: string }[]>([]);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [showRestoreDialog, setShowRestoreDialog] = useState<{
     open: boolean;
-    backup: Backup | null;
+    backup: { filename: string; createdAt: string; size: number } | null;
   }>({ open: false, backup: null });
   const [showResetDialog, setShowResetDialog] = useState(false);
 
+  // Fetch current config
+  const configQuery = trpc.config.getConfig.useQuery();
+
+  // Fetch backups list
+  const backupsQuery = trpc.config.listBackups.useQuery();
+
+  // Mutations
+  const exportConfigMutation = trpc.config.exportConfig.useQuery();
+
+  const importConfigMutation = trpc.config.importConfig.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success(data.message);
+        setShowImportDialog(false);
+        setImportJson("");
+        setValidationErrors([]);
+        configQuery.refetch();
+        backupsQuery.refetch();
+      } else {
+        toast.error(data.message);
+      }
+    },
+    onError: (error) => {
+      toast.error(`Import failed: ${error.message}`);
+    },
+  });
+
+  const createBackupMutation = trpc.config.createBackup.useMutation({
+    onSuccess: (data) => {
+      toast.success(data.message);
+      setBackupName("");
+      backupsQuery.refetch();
+    },
+    onError: (error) => {
+      toast.error(`Backup failed: ${error.message}`);
+    },
+  });
+
+  const restoreBackupMutation = trpc.config.restoreBackup.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success(data.message);
+        setShowRestoreDialog({ open: false, backup: null });
+        configQuery.refetch();
+        backupsQuery.refetch();
+      } else {
+        toast.error(data.message);
+      }
+    },
+    onError: (error) => {
+      toast.error(`Restore failed: ${error.message}`);
+    },
+  });
+
+  const deleteBackupMutation = trpc.config.deleteBackup.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success(data.message);
+        backupsQuery.refetch();
+      } else {
+        toast.error(data.message);
+      }
+    },
+    onError: (error) => {
+      toast.error(`Delete failed: ${error.message}`);
+    },
+  });
+
+  const resetToDefaultsMutation = trpc.config.resetToDefaults.useMutation({
+    onSuccess: (data) => {
+      toast.success(data.message);
+      setShowResetDialog(false);
+      configQuery.refetch();
+      backupsQuery.refetch();
+    },
+    onError: (error) => {
+      toast.error(`Reset failed: ${error.message}`);
+    },
+  });
+
+  const validateConfigMutation = trpc.config.validateConfig.useMutation({
+    onSuccess: (data) => {
+      if (data.valid) {
+        setValidationErrors([]);
+      } else {
+        setValidationErrors(data.errors);
+      }
+    },
+  });
+
+  const config = configQuery.data?.config;
+  const backups = backupsQuery.data?.backups || [];
+
   // Export configuration
   const exportConfig = () => {
-    const exportData = { ...config, exportedAt: new Date().toISOString() };
-    const json = JSON.stringify(exportData, null, 2);
-    const blob = new Blob([json], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `dgx-spark-config-${new Date().toISOString().split("T")[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("Configuration exported successfully");
+    if (exportConfigMutation.data) {
+      const json = exportConfigMutation.data.json;
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = exportConfigMutation.data.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Configuration exported successfully");
+    }
   };
 
   // Copy to clipboard
   const copyToClipboard = () => {
-    const json = JSON.stringify(config, null, 2);
-    navigator.clipboard.writeText(json);
-    toast.success("Configuration copied to clipboard");
-  };
-
-  // Validate import JSON
-  const validateImport = (json: string): string[] => {
-    const errors: string[] = [];
-    try {
-      const parsed = JSON.parse(json);
-      if (!parsed.version) errors.push("Missing version field");
-      if (!parsed.system) errors.push("Missing system configuration");
-      if (!parsed.monitoring) errors.push("Missing monitoring configuration");
-      if (!parsed.alerts) errors.push("Missing alerts configuration");
-      if (!parsed.integrations) errors.push("Missing integrations configuration");
-    } catch (e: any) {
-      errors.push(`Invalid JSON: ${e.message}`);
+    if (config) {
+      const json = JSON.stringify(config, null, 2);
+      navigator.clipboard.writeText(json);
+      toast.success("Configuration copied to clipboard");
     }
-    return errors;
   };
 
   // Handle import
   const handleImport = () => {
-    const errors = validateImport(importJson);
-    setValidationErrors(errors);
-
-    if (errors.length === 0) {
-      try {
-        const imported = JSON.parse(importJson);
-        // Create backup before import
-        const backupName = `pre-import-${Date.now()}.json`;
-        setBackups((prev) => [
-          {
-            filename: backupName,
-            createdAt: new Date().toISOString(),
-            size: JSON.stringify(config).length,
-          },
-          ...prev,
-        ]);
-        setConfig(imported);
-        setShowImportDialog(false);
-        setImportJson("");
-        toast.success("Configuration imported successfully");
-      } catch (e) {
-        toast.error("Failed to import configuration");
-      }
-    }
+    validateConfigMutation.mutate({ configJson: importJson }, {
+      onSuccess: (data) => {
+        if (data.valid) {
+          importConfigMutation.mutate({ configJson: importJson });
+        }
+      },
+    });
   };
 
   // Create backup
   const createBackup = () => {
-    const name = backupName || `backup-${new Date().toISOString().replace(/[:.]/g, "-")}`;
-    const newBackup: Backup = {
-      filename: `${name}.json`,
-      createdAt: new Date().toISOString(),
-      size: JSON.stringify(config).length,
-    };
-    setBackups((prev) => [newBackup, ...prev]);
-    setBackupName("");
-    toast.success(`Backup created: ${newBackup.filename}`);
+    createBackupMutation.mutate({ name: backupName || undefined });
   };
 
   // Restore backup
-  const restoreBackup = (backup: Backup) => {
-    // In real implementation, this would load from storage
-    // For demo, we just show success
-    setShowRestoreDialog({ open: false, backup: null });
-    toast.success(`Restored from ${backup.filename}`);
+  const restoreBackup = () => {
+    if (showRestoreDialog.backup) {
+      restoreBackupMutation.mutate({ filename: showRestoreDialog.backup.filename });
+    }
   };
 
   // Delete backup
   const deleteBackup = (filename: string) => {
-    setBackups((prev) => prev.filter((b) => b.filename !== filename));
-    toast.success(`Deleted ${filename}`);
+    deleteBackupMutation.mutate({ filename });
   };
 
   // Reset to defaults
   const resetToDefaults = () => {
-    // Create backup first
-    const backupName = `pre-reset-${Date.now()}.json`;
-    setBackups((prev) => [
-      {
-        filename: backupName,
-        createdAt: new Date().toISOString(),
-        size: JSON.stringify(config).length,
-      },
-      ...prev,
-    ]);
-    setConfig({ ...defaultConfig, exportedAt: new Date().toISOString() });
-    setShowResetDialog(false);
-    toast.success("Configuration reset to defaults");
+    resetToDefaultsMutation.mutate();
   };
+
+  const isLoading = configQuery.isLoading || backupsQuery.isLoading;
 
   return (
     <div className="space-y-6">
@@ -340,8 +250,17 @@ export default function BackupPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="outline" onClick={() => setShowResetDialog(true)}>
-            <RotateCcw className="w-4 h-4 mr-2" /> Reset to Defaults
+          <Button 
+            variant="outline" 
+            onClick={() => setShowResetDialog(true)}
+            disabled={resetToDefaultsMutation.isPending}
+          >
+            {resetToDefaultsMutation.isPending ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <RotateCcw className="w-4 h-4 mr-2" />
+            )}
+            Reset to Defaults
           </Button>
         </div>
       </div>
@@ -357,14 +276,14 @@ export default function BackupPage() {
               <Download className="w-6 h-6 text-orange-500" />
             </div>
             <div>
-              <div className="font-semibold text-white">Export Configuration</div>
-              <div className="text-sm text-gray-400">Download as JSON file</div>
+              <h3 className="font-semibold text-white">Export Config</h3>
+              <p className="text-sm text-gray-400">Download as JSON file</p>
             </div>
           </div>
         </GlassCard>
 
         <GlassCard
-          className="p-6 cursor-pointer hover:border-blue-500/50 transition-colors"
+          className="p-6 cursor-pointer hover:border-orange-500/50 transition-colors"
           onClick={() => setShowImportDialog(true)}
         >
           <div className="flex items-center gap-4">
@@ -372,14 +291,14 @@ export default function BackupPage() {
               <Upload className="w-6 h-6 text-blue-500" />
             </div>
             <div>
-              <div className="font-semibold text-white">Import Configuration</div>
-              <div className="text-sm text-gray-400">Load from JSON</div>
+              <h3 className="font-semibold text-white">Import Config</h3>
+              <p className="text-sm text-gray-400">Load from JSON file</p>
             </div>
           </div>
         </GlassCard>
 
         <GlassCard
-          className="p-6 cursor-pointer hover:border-green-500/50 transition-colors"
+          className="p-6 cursor-pointer hover:border-orange-500/50 transition-colors"
           onClick={copyToClipboard}
         >
           <div className="flex items-center gap-4">
@@ -387,208 +306,186 @@ export default function BackupPage() {
               <Copy className="w-6 h-6 text-green-500" />
             </div>
             <div>
-              <div className="font-semibold text-white">Copy to Clipboard</div>
-              <div className="text-sm text-gray-400">Copy current config</div>
+              <h3 className="font-semibold text-white">Copy to Clipboard</h3>
+              <p className="text-sm text-gray-400">Copy current config</p>
             </div>
           </div>
         </GlassCard>
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
-        {/* Current Configuration */}
-        <GlassCard className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">Current Configuration</h3>
-            <Badge variant="outline" className="text-green-400 border-green-400/30">
-              v{config.version}
-            </Badge>
-          </div>
+      {/* Current Configuration */}
+      <GlassCard className="p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-white flex items-center gap-2">
+            <FileJson className="w-5 h-5 text-orange-500" />
+            Current Configuration
+          </h2>
+          <Badge variant="outline" className="text-gray-400">
+            v{config?.version || "1.0.0"}
+          </Badge>
+        </div>
 
-          <div className="space-y-4">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-4">
             <ConfigSection title="System" icon={Settings}>
               <div className="flex justify-between">
                 <span className="text-gray-400">Hostname</span>
-                <span className="text-white">{config.system.hostname}</span>
+                <span className="text-white">{config?.system?.hostname || "dgx-spark-01"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Timezone</span>
-                <span className="text-white">{config.system.timezone}</span>
-              </div>
-            </ConfigSection>
-
-            <ConfigSection title="Monitoring" icon={RefreshCw}>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Prometheus</span>
-                <span className="text-white font-mono text-xs">
-                  {config.monitoring.prometheusUrl}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Refresh Interval</span>
-                <span className="text-white">{config.monitoring.refreshInterval}ms</span>
+                <span className="text-white">{config?.system?.timezone || "UTC"}</span>
               </div>
             </ConfigSection>
 
             <ConfigSection title="Alerts" icon={Bell}>
               <div className="flex justify-between">
                 <span className="text-gray-400">Status</span>
-                <Badge
-                  variant="outline"
-                  className={
-                    config.alerts.enabled
-                      ? "text-green-400 border-green-400/30"
-                      : "text-gray-400 border-gray-400/30"
-                  }
-                >
-                  {config.alerts.enabled ? "Enabled" : "Disabled"}
+                <Badge variant={config?.alerts?.enabled ? "default" : "secondary"}>
+                  {config?.alerts?.enabled ? "Enabled" : "Disabled"}
                 </Badge>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">Active Rules</span>
-                <span className="text-white">
-                  {config.alerts.rules.filter((r) => r.enabled).length} /{" "}
-                  {config.alerts.rules.length}
-                </span>
+                <span className="text-gray-400">Rules</span>
+                <span className="text-white">{config?.alerts?.rules?.length || 0} configured</span>
               </div>
             </ConfigSection>
 
-            <ConfigSection title="Power" icon={Zap}>
+            <ConfigSection title="Spark" icon={Zap}>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Master URL</span>
+                <span className="text-white font-mono text-xs">{config?.spark?.masterUrl || "spark://localhost:7077"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">RAPIDS</span>
+                <Badge variant={config?.spark?.rapidsEnabled ? "default" : "secondary"}>
+                  {config?.spark?.rapidsEnabled ? "Enabled" : "Disabled"}
+                </Badge>
+              </div>
+            </ConfigSection>
+
+            <ConfigSection title="Power" icon={Shield}>
               <div className="flex justify-between">
                 <span className="text-gray-400">Default Profile</span>
-                <span className="text-orange-400">{config.power.defaultProfile}</span>
+                <span className="text-white">{config?.power?.defaultProfile || "Balanced"}</span>
               </div>
-            </ConfigSection>
-
-            <ConfigSection title="Integrations" icon={Shield}>
-              <div className="flex flex-wrap gap-2">
-                <Badge
-                  variant="outline"
-                  className={
-                    config.integrations.pagerduty.enabled
-                      ? "text-green-400 border-green-400/30"
-                      : "text-gray-500 border-gray-500/30"
-                  }
-                >
-                  PagerDuty
-                </Badge>
-                <Badge
-                  variant="outline"
-                  className={
-                    config.integrations.slack.enabled
-                      ? "text-green-400 border-green-400/30"
-                      : "text-gray-500 border-gray-500/30"
-                  }
-                >
-                  Slack
-                </Badge>
-                <Badge
-                  variant="outline"
-                  className={
-                    config.integrations.splunk.enabled
-                      ? "text-green-400 border-green-400/30"
-                      : "text-gray-500 border-gray-500/30"
-                  }
-                >
-                  Splunk
-                </Badge>
-              </div>
+              {config?.power?.customPowerLimit && (
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Custom Limit</span>
+                  <span className="text-white">{config.power.customPowerLimit}W</span>
+                </div>
+              )}
             </ConfigSection>
           </div>
+        )}
+      </GlassCard>
 
-          <div className="mt-4 pt-4 border-t border-white/10 text-xs text-gray-500">
-            Last exported: {new Date(config.exportedAt).toLocaleString()}
+      {/* Backup Management */}
+      <GlassCard className="p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-white flex items-center gap-2">
+            <Archive className="w-5 h-5 text-orange-500" />
+            Backup History
+          </h2>
+          <div className="flex items-center gap-3">
+            <Input
+              placeholder="Backup name (optional)"
+              value={backupName}
+              onChange={(e) => setBackupName(e.target.value)}
+              className="w-48 bg-white/5 border-white/10"
+            />
+            <Button 
+              onClick={createBackup}
+              disabled={createBackupMutation.isPending}
+            >
+              {createBackupMutation.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4 mr-2" />
+              )}
+              Create Backup
+            </Button>
           </div>
-        </GlassCard>
+        </div>
 
-        {/* Backup Management */}
-        <GlassCard className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">Backup History</h3>
-            <div className="flex items-center gap-2">
-              <Input
-                placeholder="Backup name (optional)"
-                value={backupName}
-                onChange={(e) => setBackupName(e.target.value)}
-                className="w-48 h-8 text-sm bg-black/30 border-white/10"
-              />
-              <Button size="sm" onClick={createBackup}>
-                <Save className="w-4 h-4 mr-1" /> Create
-              </Button>
-            </div>
+        {backupsQuery.isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
-
-          <div className="space-y-2 max-h-[400px] overflow-y-auto">
-            <AnimatePresence>
-              {backups.map((backup, index) => (
-                <motion.div
-                  key={backup.filename}
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
-                  transition={{ delay: index * 0.05 }}
-                  className="flex items-center justify-between p-3 bg-black/30 rounded-lg border border-white/10 hover:border-white/20 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <FileJson className="w-5 h-5 text-orange-500" />
-                    <div>
-                      <div className="text-sm text-white font-mono">
-                        {backup.filename}
-                      </div>
-                      <div className="text-xs text-gray-500 flex items-center gap-2">
-                        <Clock className="w-3 h-3" />
-                        {new Date(backup.createdAt).toLocaleString()}
-                        <span>•</span>
-                        {formatSize(backup.size)}
-                      </div>
+        ) : backups.length === 0 ? (
+          <div className="text-center py-12 text-gray-400">
+            <Archive className="w-12 h-12 mx-auto mb-4 opacity-50" />
+            <p>No backups found</p>
+            <p className="text-sm">Create your first backup to get started</p>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/10">
+                <TableHead className="text-gray-400">Filename</TableHead>
+                <TableHead className="text-gray-400">Created</TableHead>
+                <TableHead className="text-gray-400">Size</TableHead>
+                <TableHead className="text-gray-400 text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {backups.map((backup) => (
+                <TableRow key={backup.filename} className="border-white/5 hover:bg-white/5">
+                  <TableCell className="font-mono text-sm">{backup.filename}</TableCell>
+                  <TableCell className="text-gray-400">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4" />
+                      {new Date(backup.createdAt).toLocaleString()}
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setShowRestoreDialog({ open: true, backup })}
-                      className="text-blue-400 hover:text-blue-300"
-                    >
-                      <RotateCcw className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => deleteBackup(backup.filename)}
-                      className="text-red-400 hover:text-red-300"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </motion.div>
+                  </TableCell>
+                  <TableCell className="text-gray-400">{formatSize(backup.size)}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowRestoreDialog({ open: true, backup })}
+                        disabled={restoreBackupMutation.isPending}
+                      >
+                        <RefreshCw className="w-4 h-4 mr-1" /> Restore
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => deleteBackup(backup.filename)}
+                        disabled={deleteBackupMutation.isPending}
+                        className="text-red-400 hover:text-red-300"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
               ))}
-            </AnimatePresence>
-
-            {backups.length === 0 && (
-              <div className="text-center py-8 text-gray-500">
-                No backups yet. Create one to get started.
-              </div>
-            )}
-          </div>
-        </GlassCard>
-      </div>
+            </TableBody>
+          </Table>
+        )}
+      </GlassCard>
 
       {/* Import Dialog */}
       <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
-        <DialogContent className="bg-[#0a0a0a] border-white/10 max-w-2xl">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle className="text-white flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2">
               <Upload className="w-5 h-5 text-blue-500" />
               Import Configuration
             </DialogTitle>
-            <DialogDescription className="text-gray-400">
-              Paste your configuration JSON below. A backup will be created automatically.
+            <DialogDescription>
+              Paste your configuration JSON below. A backup will be created before importing.
             </DialogDescription>
           </DialogHeader>
-
           <div className="space-y-4">
             <Textarea
-              placeholder='{"version": "1.0.0", "system": {...}, ...}'
+              placeholder='{"version": "1.0.0", ...}'
               value={importJson}
               onChange={(e) => {
                 setImportJson(e.target.value);
@@ -596,39 +493,34 @@ export default function BackupPage() {
               }}
               className="h-64 font-mono text-sm bg-black/50 border-white/10"
             />
-
             {validationErrors.length > 0 && (
               <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-                <div className="flex items-center gap-2 text-red-400 font-semibold mb-2">
-                  <X className="w-4 h-4" /> Validation Errors
+                <div className="flex items-center gap-2 text-red-400 mb-2">
+                  <X className="w-4 h-4" />
+                  <span className="font-semibold">Validation Errors</span>
                 </div>
                 <ul className="text-sm text-red-300 space-y-1">
                   {validationErrors.map((error, i) => (
-                    <li key={i}>• {error}</li>
+                    <li key={i}>• {error.path}: {error.message}</li>
                   ))}
                 </ul>
               </div>
             )}
-
-            {importJson && validationErrors.length === 0 && (
-              <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
-                <div className="flex items-center gap-2 text-green-400">
-                  <Check className="w-4 h-4" /> JSON is valid
-                </div>
-              </div>
-            )}
           </div>
-
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowImportDialog(false)}>
               Cancel
             </Button>
-            <Button
+            <Button 
               onClick={handleImport}
-              disabled={!importJson}
-              className="bg-blue-600 hover:bg-blue-700"
+              disabled={!importJson || importConfigMutation.isPending || validateConfigMutation.isPending}
             >
-              <Upload className="w-4 h-4 mr-2" /> Import
+              {(importConfigMutation.isPending || validateConfigMutation.isPending) ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Upload className="w-4 h-4 mr-2" />
+              )}
+              Import
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -637,20 +529,18 @@ export default function BackupPage() {
       {/* Restore Dialog */}
       <Dialog
         open={showRestoreDialog.open}
-        onOpenChange={(open) => setShowRestoreDialog({ open, backup: null })}
+        onOpenChange={(open) => setShowRestoreDialog({ open, backup: showRestoreDialog.backup })}
       >
-        <DialogContent className="bg-[#0a0a0a] border-white/10">
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle className="text-white flex items-center gap-2">
-              <RotateCcw className="w-5 h-5 text-blue-500" />
-              Restore Backup
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-yellow-500" />
+              Restore Configuration
             </DialogTitle>
-            <DialogDescription className="text-gray-400">
+            <DialogDescription>
               Are you sure you want to restore from{" "}
-              <span className="text-white font-mono">
-                {showRestoreDialog.backup?.filename}
-              </span>
-              ? Current configuration will be backed up first.
+              <span className="font-mono text-white">{showRestoreDialog.backup?.filename}</span>?
+              A backup of the current configuration will be created first.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -660,13 +550,16 @@ export default function BackupPage() {
             >
               Cancel
             </Button>
-            <Button
-              onClick={() =>
-                showRestoreDialog.backup && restoreBackup(showRestoreDialog.backup)
-              }
-              className="bg-blue-600 hover:bg-blue-700"
+            <Button 
+              onClick={restoreBackup}
+              disabled={restoreBackupMutation.isPending}
             >
-              <RotateCcw className="w-4 h-4 mr-2" /> Restore
+              {restoreBackupMutation.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4 mr-2" />
+              )}
+              Restore
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -674,26 +567,32 @@ export default function BackupPage() {
 
       {/* Reset Dialog */}
       <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
-        <DialogContent className="bg-[#0a0a0a] border-white/10">
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle className="text-white flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-yellow-500" />
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-red-500" />
               Reset to Defaults
             </DialogTitle>
-            <DialogDescription className="text-gray-400">
-              This will reset all configuration to factory defaults. A backup of your
-              current configuration will be created automatically.
+            <DialogDescription>
+              This will reset all configuration to factory defaults. A backup will be created
+              before resetting. This action cannot be undone without restoring from backup.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowResetDialog(false)}>
               Cancel
             </Button>
-            <Button
+            <Button 
+              variant="destructive" 
               onClick={resetToDefaults}
-              className="bg-yellow-600 hover:bg-yellow-700"
+              disabled={resetToDefaultsMutation.isPending}
             >
-              <RotateCcw className="w-4 h-4 mr-2" /> Reset
+              {resetToDefaultsMutation.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <RotateCcw className="w-4 h-4 mr-2" />
+              )}
+              Reset
             </Button>
           </DialogFooter>
         </DialogContent>

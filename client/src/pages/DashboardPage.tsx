@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
+import { trpc } from "@/lib/trpc";
 import { 
   Activity, 
   Cpu, 
@@ -15,18 +16,21 @@ import {
   Gauge,
   MemoryStick,
   MonitorDot,
-  Wifi
+  Wifi,
+  AlertCircle,
+  Loader2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Stat Card Component
-const StatCard = ({ title, value, subValue, icon: Icon, trend, trendValue }: {
+const StatCard = ({ title, value, subValue, icon: Icon, trend, trendValue, isLoading }: {
   title: string;
   value: string;
   subValue?: string;
   icon: any;
   trend?: "up" | "down";
   trendValue?: string;
+  isLoading?: boolean;
 }) => (
   <GlassCard className="flex flex-col justify-between h-full">
     <div className="flex justify-between items-start mb-4">
@@ -47,30 +51,54 @@ const StatCard = ({ title, value, subValue, icon: Icon, trend, trendValue }: {
     </div>
     <div>
       <h3 className="text-muted-foreground text-sm font-medium mb-1">{title}</h3>
-      <div className="text-2xl font-display font-bold tracking-wide">{value}</div>
-      {subValue && <div className="text-xs text-muted-foreground mt-1">{subValue}</div>}
+      {isLoading ? (
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          <span className="text-muted-foreground">Loading...</span>
+        </div>
+      ) : (
+        <>
+          <div className="text-2xl font-display font-bold tracking-wide">{value}</div>
+          {subValue && <div className="text-xs text-muted-foreground mt-1">{subValue}</div>}
+        </>
+      )}
     </div>
   </GlassCard>
 );
 
 // System Status Banner
-const SystemStatus = ({ hostname, uptime, status }: { hostname: string; uptime: string; status: string }) => (
+const SystemStatus = ({ hostname, uptime, status, isLoading }: { 
+  hostname: string; 
+  uptime: string; 
+  status: string;
+  isLoading?: boolean;
+}) => (
   <GlassCard className="relative overflow-hidden">
     <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-transparent" />
     <div className="flex flex-col md:flex-row items-center justify-between gap-6 relative z-10">
       <div className="flex items-center gap-4">
         <div className="relative">
-          <div className={cn(
-            "h-3 w-3 rounded-full animate-ping absolute inset-0",
-            status === "online" ? "bg-green-500" : "bg-red-500"
-          )} />
-          <div className={cn(
-            "h-3 w-3 rounded-full relative",
-            status === "online" ? "bg-green-500 shadow-[0_0_10px_#22c55e]" : "bg-red-500 shadow-[0_0_10px_#ef4444]"
-          )} />
+          {isLoading ? (
+            <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+          ) : (
+            <>
+              <div className={cn(
+                "h-3 w-3 rounded-full animate-ping absolute inset-0",
+                status === "operational" ? "bg-green-500" : status === "degraded" ? "bg-yellow-500" : "bg-red-500"
+              )} />
+              <div className={cn(
+                "h-3 w-3 rounded-full relative",
+                status === "operational" ? "bg-green-500 shadow-[0_0_10px_#22c55e]" : 
+                status === "degraded" ? "bg-yellow-500 shadow-[0_0_10px_#eab308]" : 
+                "bg-red-500 shadow-[0_0_10px_#ef4444]"
+              )} />
+            </>
+          )}
         </div>
         <div>
-          <h2 className="text-lg font-display font-bold">DGX Spark: {status === "online" ? "Operational" : "Offline"}</h2>
+          <h2 className="text-lg font-display font-bold">
+            DGX Spark: {status === "operational" ? "Operational" : status === "degraded" ? "Degraded" : "Offline"}
+          </h2>
           <p className="text-sm text-muted-foreground font-mono">{hostname}</p>
         </div>
       </div>
@@ -94,18 +122,20 @@ const SystemStatus = ({ hostname, uptime, status }: { hostname: string; uptime: 
 );
 
 // GB10 Superchip Visualization
-const GB10SuperchipCard = ({ gpuUtil, gpuTemp, gpuPower, memUsed, memTotal }: {
+const GB10SuperchipCard = ({ gpuUtil, gpuTemp, gpuPower, memUsed, memTotal, isLoading }: {
   gpuUtil: number;
   gpuTemp: number;
   gpuPower: number;
   memUsed: number;
   memTotal: number;
+  isLoading?: boolean;
 }) => (
   <GlassCard className="relative overflow-hidden">
     <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl" />
     <h3 className="font-display font-bold text-lg mb-4 flex items-center gap-2">
       <Cpu className="h-5 w-5 text-primary" />
       NVIDIA GB10 Superchip
+      {isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground ml-2" />}
     </h3>
     
     <div className="grid grid-cols-2 gap-4 mb-6">
@@ -136,7 +166,10 @@ const GB10SuperchipCard = ({ gpuUtil, gpuTemp, gpuPower, memUsed, memTotal }: {
             <div className="h-12 w-20 rounded-lg bg-gradient-to-br from-primary/40 to-primary/20 border border-primary/50 flex items-center justify-center">
               <span className="text-xs font-bold text-primary">GPU</span>
             </div>
-            <div className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-green-500 animate-pulse" />
+            <div className={cn(
+              "absolute -top-1 -right-1 h-3 w-3 rounded-full",
+              gpuUtil > 0 ? "bg-green-500 animate-pulse" : "bg-gray-500"
+            )} />
           </div>
         </div>
         <div className="text-center text-[10px] text-muted-foreground mt-1">1000 AI TOPS</div>
@@ -148,7 +181,7 @@ const GB10SuperchipCard = ({ gpuUtil, gpuTemp, gpuPower, memUsed, memTotal }: {
       <div className="space-y-1">
         <div className="flex justify-between text-xs">
           <span className="text-muted-foreground flex items-center gap-1"><Gauge className="h-3 w-3" /> GPU Utilization</span>
-          <span className="font-mono text-primary">{gpuUtil}%</span>
+          <span className="font-mono text-primary">{gpuUtil.toFixed(1)}%</span>
         </div>
         <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
           <div 
@@ -162,7 +195,7 @@ const GB10SuperchipCard = ({ gpuUtil, gpuTemp, gpuPower, memUsed, memTotal }: {
         <div className="flex justify-between text-xs">
           <span className="text-muted-foreground flex items-center gap-1"><Thermometer className="h-3 w-3" /> Temperature</span>
           <span className={cn("font-mono", gpuTemp > 80 ? "text-red-400" : gpuTemp > 65 ? "text-yellow-400" : "text-green-400")}>
-            {gpuTemp}°C
+            {gpuTemp.toFixed(0)}°C
           </span>
         </div>
         <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
@@ -179,12 +212,12 @@ const GB10SuperchipCard = ({ gpuUtil, gpuTemp, gpuPower, memUsed, memTotal }: {
       <div className="space-y-1">
         <div className="flex justify-between text-xs">
           <span className="text-muted-foreground flex items-center gap-1"><Zap className="h-3 w-3" /> Power Draw</span>
-          <span className="font-mono">{gpuPower}W / 100W</span>
+          <span className="font-mono">{gpuPower.toFixed(0)}W / 100W</span>
         </div>
         <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
           <div 
             className="h-full bg-purple-500 transition-all duration-500" 
-            style={{ width: `${(gpuPower / 100) * 100}%` }}
+            style={{ width: `${gpuPower}%` }}
           />
         </div>
       </div>
@@ -192,7 +225,7 @@ const GB10SuperchipCard = ({ gpuUtil, gpuTemp, gpuPower, memUsed, memTotal }: {
       <div className="space-y-1">
         <div className="flex justify-between text-xs">
           <span className="text-muted-foreground flex items-center gap-1"><MemoryStick className="h-3 w-3" /> Unified Memory (LPDDR5x)</span>
-          <span className="font-mono">{memUsed}GB / {memTotal}GB</span>
+          <span className="font-mono">{memUsed.toFixed(0)}GB / {memTotal}GB</span>
         </div>
         <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
           <div 
@@ -213,7 +246,7 @@ const QuickActionsCard = () => (
       {[
         { label: "New Spark Job", icon: Activity, href: "/spark" },
         { label: "Model Inference", icon: BrainCircuit, href: "/inference" },
-        { label: "View Logs", icon: MonitorDot, href: "/support" },
+        { label: "View Logs", icon: MonitorDot, href: "/logs" },
         { label: "Network Stats", icon: Wifi, href: "/network" },
       ].map((action) => (
         <a
@@ -229,74 +262,130 @@ const QuickActionsCard = () => (
   </GlassCard>
 );
 
-// Recent Activity Card
-const RecentActivityCard = () => (
-  <GlassCard>
-    <h3 className="font-display font-bold text-lg mb-4">Recent Activity</h3>
-    <div className="space-y-3">
-      {[
-        { type: "job", message: "Spark job 'etl-pipeline-daily' completed", time: "2 mins ago", status: "success" },
-        { type: "inference", message: "Llama-3.1-8B model loaded", time: "15 mins ago", status: "info" },
-        { type: "alert", message: "GPU temperature normalized", time: "1 hour ago", status: "warning" },
-        { type: "system", message: "System update applied", time: "3 hours ago", status: "info" },
-      ].map((activity, i) => (
-        <div key={i} className="flex gap-3 items-start p-3 rounded-lg bg-white/5 border border-white/5 hover:bg-white/10 transition-colors">
-          <div className={cn(
-            "mt-1 h-2 w-2 rounded-full shrink-0",
-            activity.status === "success" ? "bg-green-500" :
-            activity.status === "warning" ? "bg-yellow-500" :
-            activity.status === "error" ? "bg-red-500" : "bg-blue-500"
-          )} />
-          <div className="flex-1 min-w-0">
-            <div className="text-sm truncate">{activity.message}</div>
-            <div className="text-[10px] font-mono text-muted-foreground mt-1">{activity.time}</div>
+// Recent Activity Card - Now connected to Spark job history
+const RecentActivityCard = () => {
+  const jobHistory = trpc.spark.getJobHistory.useQuery({ limit: 5, status: 'all' }, {
+    refetchInterval: 10000,
+  });
+
+  const activities = jobHistory.data?.map(job => ({
+    type: "job",
+    message: `Spark job '${job.appName}' ${job.status.toLowerCase()}`,
+    time: new Date(job.submittedAt).toLocaleTimeString(),
+    status: job.status === 'FINISHED' ? 'success' : 
+            job.status === 'FAILED' ? 'error' : 
+            job.status === 'RUNNING' ? 'info' : 'warning'
+  })) || [];
+
+  return (
+    <GlassCard>
+      <h3 className="font-display font-bold text-lg mb-4">Recent Activity</h3>
+      <div className="space-y-3">
+        {jobHistory.isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : activities.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <Activity className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">No recent activity</p>
+          </div>
+        ) : (
+          activities.map((activity, i) => (
+            <div key={i} className="flex gap-3 items-start p-3 rounded-lg bg-white/5 border border-white/5 hover:bg-white/10 transition-colors">
+              <div className={cn(
+                "mt-1 h-2 w-2 rounded-full shrink-0",
+                activity.status === "success" ? "bg-green-500" :
+                activity.status === "warning" ? "bg-yellow-500" :
+                activity.status === "error" ? "bg-red-500" : "bg-blue-500"
+              )} />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm truncate">{activity.message}</div>
+                <div className="text-[10px] font-mono text-muted-foreground mt-1">{activity.time}</div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </GlassCard>
+  );
+};
+
+// Storage Card - Now connected to local API
+const StorageCard = () => {
+  const storageQuery = trpc.local.getStorage.useQuery(undefined, {
+    refetchInterval: 30000,
+  });
+
+  const device = storageQuery.data?.devices[0];
+  const usedTB = device ? device.used / (1024 * 1024 * 1024 * 1024) : 0;
+  const totalTB = device ? device.total / (1024 * 1024 * 1024 * 1024) : 2;
+  const percentage = device ? (device.used / device.total) * 100 : 0;
+
+  return (
+    <GlassCard>
+      <h3 className="font-display font-bold text-lg mb-4 flex items-center gap-2">
+        <HardDrive className="h-5 w-5 text-primary" />
+        Storage
+        {storageQuery.isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground ml-2" />}
+      </h3>
+      <div className="space-y-4">
+        <div>
+          <div className="flex justify-between text-sm mb-2">
+            <span className="text-muted-foreground">NVMe SSD</span>
+            <span className="font-mono">{usedTB.toFixed(1)} / {totalTB.toFixed(1)} TB</span>
+          </div>
+          <div className="h-3 w-full bg-white/10 rounded-full overflow-hidden">
+            <div 
+              className={cn(
+                "h-full transition-all duration-500",
+                percentage > 90 ? "bg-red-500" : percentage > 75 ? "bg-yellow-500" : "bg-primary"
+              )}
+              style={{ width: `${percentage}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-xs text-muted-foreground mt-1">
+            <span>{percentage.toFixed(1)}% used</span>
+            <span>{(totalTB - usedTB).toFixed(1)} TB free</span>
           </div>
         </div>
-      ))}
-    </div>
-  </GlassCard>
-);
+        
+        <div className="pt-4 border-t border-white/10">
+          <div className="text-xs text-muted-foreground mb-2">Performance</div>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="text-muted-foreground">Read Speed</span>
+              <div className="font-mono font-bold">7.0 GB/s</div>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Write Speed</span>
+              <div className="font-mono font-bold">6.5 GB/s</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </GlassCard>
+  );
+};
 
-// Storage Card
-const StorageCard = () => (
-  <GlassCard>
-    <h3 className="font-display font-bold text-lg mb-4 flex items-center gap-2">
-      <HardDrive className="h-5 w-5 text-primary" />
-      Storage
-    </h3>
-    <div className="space-y-4">
-      <div>
-        <div className="flex justify-between text-xs mb-1">
-          <span className="text-muted-foreground">NVMe SSD</span>
-          <span className="font-mono">1.2TB / 2TB</span>
-        </div>
-        <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
-          <div className="h-full bg-gradient-to-r from-green-500 to-emerald-500 w-[60%]" />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4 text-xs">
-        <div>
-          <span className="text-muted-foreground">Read Speed</span>
-          <div className="font-mono font-bold">7.0 GB/s</div>
-        </div>
-        <div>
-          <span className="text-muted-foreground">Write Speed</span>
-          <div className="font-mono font-bold">6.5 GB/s</div>
-        </div>
-      </div>
-    </div>
-  </GlassCard>
-);
+// Format uptime from seconds
+function formatUptime(seconds: number): string {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  return `${days}d ${hours}h ${minutes}m`;
+}
 
 export default function DashboardPage() {
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [metrics, setMetrics] = useState({
-    gpuUtil: 72,
-    gpuTemp: 58,
-    gpuPower: 65,
-    memUsed: 78,
-    memTotal: 128,
-    uptime: "14d 2h 15m"
+
+  // Fetch real metrics from backend
+  const overviewQuery = trpc.local.getOverview.useQuery(undefined, {
+    refetchInterval: 3000, // Refresh every 3 seconds
+  });
+
+  const clusterResourcesQuery = trpc.spark.getClusterResources.useQuery(undefined, {
+    refetchInterval: 5000,
   });
 
   // Update time every second
@@ -305,19 +394,18 @@ export default function DashboardPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Simulate metric updates
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setMetrics(prev => ({
-        ...prev,
-        gpuUtil: Math.min(100, Math.max(0, prev.gpuUtil + (Math.random() - 0.5) * 10)),
-        gpuTemp: Math.min(85, Math.max(45, prev.gpuTemp + (Math.random() - 0.5) * 3)),
-        gpuPower: Math.min(100, Math.max(30, prev.gpuPower + (Math.random() - 0.5) * 8)),
-        memUsed: Math.min(128, Math.max(20, prev.memUsed + (Math.random() - 0.5) * 5)),
-      }));
-    }, 3000);
-    return () => clearInterval(timer);
-  }, []);
+  // Extract metrics from query data
+  const overview = overviewQuery.data;
+  const clusterResources = clusterResourcesQuery.data;
+
+  const gpuUtil = overview?.gpu.utilization ?? 0;
+  const gpuTemp = overview?.gpu.temperature ?? 0;
+  const gpuPower = overview?.gpu.powerDraw ?? 0;
+  const memUsedGB = overview?.memory.used ? overview.memory.used / (1024 * 1024 * 1024) : 0;
+  const memTotalGB = overview?.memory.total ? overview.memory.total / (1024 * 1024 * 1024) : 128;
+  const uptime = overview?.uptime ?? "Loading...";
+  const hostname = overview?.hostname ?? "dgx-spark-local";
+  const status = overview?.status ?? "operational";
 
   return (
     <div className="space-y-6 pb-10">
@@ -335,9 +423,10 @@ export default function DashboardPage() {
 
       {/* System Status Banner */}
       <SystemStatus 
-        hostname="dgx-spark-local" 
-        uptime={metrics.uptime} 
-        status="online" 
+        hostname={hostname} 
+        uptime={uptime} 
+        status={status}
+        isLoading={overviewQuery.isLoading}
       />
 
       {/* Stats Grid */}
@@ -348,29 +437,33 @@ export default function DashboardPage() {
           subValue="Blackwell Architecture"
           icon={Zap} 
           trend="up" 
-          trendValue="Active" 
+          trendValue={gpuUtil > 0 ? "Active" : "Idle"} 
+          isLoading={overviewQuery.isLoading}
         />
         <StatCard 
           title="Active Workloads" 
-          value="3 Running" 
-          subValue="2 Spark, 1 Inference"
+          value={`${clusterResources?.activeApplications ?? 0} Running`}
+          subValue={`${clusterResources?.gpusInUse ?? 0} using GPU`}
           icon={Activity} 
           trend="up" 
-          trendValue="2 Queued" 
+          trendValue={clusterResources?.activeApplications ? `${clusterResources.activeApplications} Active` : undefined}
+          isLoading={clusterResourcesQuery.isLoading}
         />
         <StatCard 
           title="Unified Memory" 
-          value={`${Math.round(metrics.memUsed)} GB`}
-          subValue={`${Math.round((metrics.memUsed / metrics.memTotal) * 100)}% of 128GB LPDDR5x`}
+          value={`${Math.round(memUsedGB)} GB`}
+          subValue={`${Math.round((memUsedGB / memTotalGB) * 100)}% of ${Math.round(memTotalGB)}GB LPDDR5x`}
           icon={MemoryStick} 
+          isLoading={overviewQuery.isLoading}
         />
         <StatCard 
-          title="Inference Throughput" 
-          value="215 RPS" 
-          subValue="Llama-3.1-8B"
-          icon={BrainCircuit} 
-          trend="up" 
-          trendValue="+8%" 
+          title="GPU Temperature" 
+          value={`${gpuTemp.toFixed(0)}°C`}
+          subValue={gpuTemp > 80 ? "High - Check cooling" : gpuTemp > 65 ? "Warm" : "Normal"}
+          icon={Thermometer} 
+          trend={gpuTemp > 65 ? "up" : "down"}
+          trendValue={gpuTemp > 80 ? "Warning" : gpuTemp > 65 ? "Elevated" : "OK"}
+          isLoading={overviewQuery.isLoading}
         />
       </div>
 
@@ -379,11 +472,12 @@ export default function DashboardPage() {
         {/* GB10 Superchip - Takes 2 columns */}
         <div className="lg:col-span-2">
           <GB10SuperchipCard 
-            gpuUtil={Math.round(metrics.gpuUtil)}
-            gpuTemp={Math.round(metrics.gpuTemp)}
-            gpuPower={Math.round(metrics.gpuPower)}
-            memUsed={Math.round(metrics.memUsed)}
-            memTotal={metrics.memTotal}
+            gpuUtil={gpuUtil}
+            gpuTemp={gpuTemp}
+            gpuPower={gpuPower}
+            memUsed={memUsedGB}
+            memTotal={Math.round(memTotalGB)}
+            isLoading={overviewQuery.isLoading}
           />
         </div>
 

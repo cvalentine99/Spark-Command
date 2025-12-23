@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { GlassCard } from "@/components/ui/glass-card";
+import { trpc } from "@/lib/trpc";
 import { 
   Cpu, 
   Thermometer, 
@@ -11,13 +12,12 @@ import {
   MemoryStick,
   HardDrive,
   Gauge,
-  Clock,
-  Info
+  Loader2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Telemetry Gauge Component
-const TelemetryGauge = ({ label, value, unit, max, icon: Icon, colorClass, warning, critical }: {
+const TelemetryGauge = ({ label, value, unit, max, icon: Icon, colorClass, warning, critical, isLoading }: {
   label: string;
   value: number;
   unit: string;
@@ -26,6 +26,7 @@ const TelemetryGauge = ({ label, value, unit, max, icon: Icon, colorClass, warni
   colorClass: string;
   warning?: number;
   critical?: number;
+  isLoading?: boolean;
 }) => {
   const percentage = Math.min((value / max) * 100, 100);
   const isWarning = warning && value >= warning;
@@ -40,12 +41,16 @@ const TelemetryGauge = ({ label, value, unit, max, icon: Icon, colorClass, warni
           <Icon className="h-4 w-4" />
           <span>{label}</span>
         </div>
-        <span className={cn(
-          "font-mono font-bold",
-          isCritical ? "text-red-400" : isWarning ? "text-yellow-400" : ""
-        )}>
-          {value}<span className="text-xs text-muted-foreground ml-0.5">{unit}</span>
-        </span>
+        {isLoading ? (
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        ) : (
+          <span className={cn(
+            "font-mono font-bold",
+            isCritical ? "text-red-400" : isWarning ? "text-yellow-400" : ""
+          )}>
+            {typeof value === 'number' ? value.toFixed(1) : value}<span className="text-xs text-muted-foreground ml-0.5">{unit}</span>
+          </span>
+        )}
       </div>
       <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
         <div 
@@ -58,7 +63,7 @@ const TelemetryGauge = ({ label, value, unit, max, icon: Icon, colorClass, warni
 };
 
 // GB10 Superchip Visualizer
-const GB10Visualizer = ({ telemetry }: { telemetry: any }) => {
+const GB10Visualizer = ({ telemetry }: { telemetry: { cpuLoad: number; gpuUtil: number; gpuTemp: number; memoryUsed: number } }) => {
   return (
     <div className="relative h-64 w-full bg-black/40 rounded-xl border border-white/10 flex items-center justify-center overflow-hidden">
       {/* Background Glow */}
@@ -136,7 +141,7 @@ const GB10Visualizer = ({ telemetry }: { telemetry: any }) => {
           "bg-green-500/20 border-green-500/50 text-green-400"
         )}>
           <Thermometer className="h-3 w-3" />
-          {telemetry.gpuTemp}°C
+          {telemetry.gpuTemp.toFixed(0)}°C
         </div>
       </div>
 
@@ -171,20 +176,20 @@ const GB10Visualizer = ({ telemetry }: { telemetry: any }) => {
   );
 };
 
-// Process List Component
+// Process List Component - Now connected to API
 const ProcessList = () => {
-  const processes = [
-    { name: "spark-executor", pid: 12345, cpu: 45, mem: 8.2, gpu: 35 },
-    { name: "vllm-server", pid: 12346, cpu: 12, mem: 24.5, gpu: 55 },
-    { name: "jupyter-lab", pid: 12347, cpu: 3, mem: 2.1, gpu: 0 },
-    { name: "dcgm-exporter", pid: 12348, cpu: 1, mem: 0.3, gpu: 0 },
-  ];
+  const processesQuery = trpc.local.getProcesses.useQuery(undefined, {
+    refetchInterval: 5000,
+  });
+
+  const processes = processesQuery.data?.processes || [];
 
   return (
     <GlassCard>
       <h3 className="font-display font-bold text-lg mb-4 flex items-center gap-2">
         <Activity className="h-5 w-5 text-primary" />
         Active Processes
+        {processesQuery.isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground ml-2" />}
       </h3>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -198,17 +203,25 @@ const ProcessList = () => {
             </tr>
           </thead>
           <tbody>
-            {processes.map((proc) => (
-              <tr key={proc.pid} className="border-b border-white/5 hover:bg-white/5">
-                <td className="py-2 font-mono text-xs">{proc.name}</td>
-                <td className="py-2 text-right font-mono text-xs text-muted-foreground">{proc.pid}</td>
-                <td className="py-2 text-right font-mono text-xs">{proc.cpu}%</td>
-                <td className="py-2 text-right font-mono text-xs">{proc.mem}</td>
-                <td className="py-2 text-right font-mono text-xs">
-                  {proc.gpu > 0 ? <span className="text-primary">{proc.gpu}%</span> : "-"}
+            {processes.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                  {processesQuery.isLoading ? "Loading processes..." : "No active processes"}
                 </td>
               </tr>
-            ))}
+            ) : (
+              processes.map((proc) => (
+                <tr key={proc.pid} className="border-b border-white/5 hover:bg-white/5">
+                  <td className="py-2 font-mono text-xs">{proc.name}</td>
+                  <td className="py-2 text-right font-mono text-xs text-muted-foreground">{proc.pid}</td>
+                  <td className="py-2 text-right font-mono text-xs">{proc.cpu.toFixed(1)}%</td>
+                  <td className="py-2 text-right font-mono text-xs">{proc.memory.toFixed(1)}</td>
+                  <td className="py-2 text-right font-mono text-xs">
+                    {proc.gpuMemory && proc.gpuMemory > 0 ? <span className="text-primary">{proc.gpuMemory}%</span> : "-"}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -217,36 +230,39 @@ const ProcessList = () => {
 };
 
 export default function NodesPage() {
-  const [telemetry, setTelemetry] = useState({
-    cpuLoad: 45,
-    memoryUsed: 78,
-    gpuUtil: 72,
-    gpuTemp: 58,
-    gpuPower: 65,
-    fanSpeed: 45,
-    nvmeUsed: 1.2,
-    nvmeTotal: 2.0,
-    networkRx: 125,
-    networkTx: 89
+  // Fetch real metrics from backend
+  const metricsQuery = trpc.local.getMetrics.useQuery(undefined, {
+    refetchInterval: 2000, // Refresh every 2 seconds
   });
 
-  // Simulate telemetry updates
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTelemetry(prev => ({
-        ...prev,
-        cpuLoad: Math.min(100, Math.max(10, prev.cpuLoad + (Math.random() - 0.5) * 15)),
-        memoryUsed: Math.min(128, Math.max(20, prev.memoryUsed + (Math.random() - 0.5) * 8)),
-        gpuUtil: Math.min(100, Math.max(0, prev.gpuUtil + (Math.random() - 0.5) * 12)),
-        gpuTemp: Math.min(85, Math.max(40, prev.gpuTemp + (Math.random() - 0.5) * 4)),
-        gpuPower: Math.min(100, Math.max(20, prev.gpuPower + (Math.random() - 0.5) * 10)),
-        fanSpeed: Math.min(100, Math.max(20, prev.fanSpeed + (Math.random() - 0.5) * 8)),
-        networkRx: Math.max(0, prev.networkRx + (Math.random() - 0.5) * 50),
-        networkTx: Math.max(0, prev.networkTx + (Math.random() - 0.5) * 30),
-      }));
-    }, 2000);
-    return () => clearInterval(timer);
-  }, []);
+  const systemInfoQuery = trpc.local.getSystemInfo.useQuery(undefined, {
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+
+  const healthQuery = trpc.local.health.useQuery(undefined, {
+    refetchInterval: 5000,
+  });
+
+  const metrics = metricsQuery.data;
+  const systemInfo = systemInfoQuery.data;
+  const health = healthQuery.data;
+
+  // Extract telemetry values
+  const telemetry = {
+    cpuLoad: metrics?.cpu.usage ?? 0,
+    memoryUsed: metrics?.memory.used ? metrics.memory.used / (1024 * 1024 * 1024) : 0,
+    gpuUtil: metrics?.gpu.utilization ?? 0,
+    gpuTemp: metrics?.gpu.temperature ?? 0,
+    gpuPower: metrics?.gpu.powerDraw ?? 0,
+    fanSpeed: metrics?.gpu.fanSpeed ?? 0,
+    nvmeUsed: metrics?.storage.devices[0] ? metrics.storage.devices[0].used / (1024 * 1024 * 1024 * 1024) : 0,
+    nvmeTotal: metrics?.storage.devices[0] ? metrics.storage.devices[0].total / (1024 * 1024 * 1024 * 1024) : 2,
+    networkRx: metrics?.network.interfaces[0]?.rxBytes ? metrics.network.interfaces[0].rxBytes / (1024 * 1024) : 0,
+    networkTx: metrics?.network.interfaces[0]?.txBytes ? metrics.network.interfaces[0].txBytes / (1024 * 1024) : 0,
+  };
+
+  const isLoading = metricsQuery.isLoading;
+  const isHealthy = health?.status === 'healthy';
 
   return (
     <div className="space-y-6 pb-10">
@@ -257,10 +273,25 @@ export default function NodesPage() {
           <p className="text-muted-foreground">NVIDIA GB10 Superchip monitoring</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400 text-sm">
-            <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-            System Online
-          </div>
+          {isLoading ? (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10 border border-white/20 text-muted-foreground text-sm">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading...
+            </div>
+          ) : (
+            <div className={cn(
+              "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm",
+              isHealthy 
+                ? "bg-green-500/10 border border-green-500/20 text-green-400"
+                : "bg-yellow-500/10 border border-yellow-500/20 text-yellow-400"
+            )}>
+              <div className={cn(
+                "h-2 w-2 rounded-full animate-pulse",
+                isHealthy ? "bg-green-500" : "bg-yellow-500"
+              )} />
+              {isHealthy ? "System Online" : "System Warning"}
+            </div>
+          )}
         </div>
       </div>
 
@@ -272,25 +303,27 @@ export default function NodesPage() {
           </div>
           <div>
             <h2 className="text-xl font-display font-bold">DGX Spark</h2>
-            <div className="text-sm text-muted-foreground font-mono">dgx-spark-local • 127.0.0.1</div>
+            <div className="text-sm text-muted-foreground font-mono">
+              {systemInfo?.hostname ?? "dgx-spark-local"} • {metrics?.network.interfaces[0]?.ip ?? "127.0.0.1"}
+            </div>
           </div>
         </div>
         <div className="flex flex-wrap gap-6 text-sm">
           <div className="flex flex-col">
             <span className="text-muted-foreground text-xs">CPU</span>
-            <span className="font-mono">10x X925 + 10x A725</span>
+            <span className="font-mono">{systemInfo?.cpu ?? "10x X925 + 10x A725"}</span>
           </div>
           <div className="flex flex-col">
             <span className="text-muted-foreground text-xs">GPU</span>
-            <span className="font-mono">Blackwell (1000 TOPS)</span>
+            <span className="font-mono">{metrics?.gpu.name ?? "Blackwell (1000 TOPS)"}</span>
           </div>
           <div className="flex flex-col">
             <span className="text-muted-foreground text-xs">Memory</span>
-            <span className="font-mono">128GB LPDDR5x</span>
+            <span className="font-mono">{systemInfo?.memory ?? "128GB LPDDR5x"}</span>
           </div>
           <div className="flex flex-col">
             <span className="text-muted-foreground text-xs">Uptime</span>
-            <span className="font-mono">14d 2h 15m</span>
+            <span className="font-mono">{systemInfo?.uptime ?? "Loading..."}</span>
           </div>
         </div>
       </GlassCard>
@@ -302,6 +335,7 @@ export default function NodesPage() {
           <h3 className="font-display font-bold text-lg mb-4 flex items-center gap-2">
             <Microchip className="h-5 w-5 text-primary" />
             GB10 Superchip Status
+            {isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground ml-2" />}
           </h3>
           <GB10Visualizer telemetry={telemetry} />
           
@@ -331,59 +365,65 @@ export default function NodesPage() {
           <div className="space-y-5">
             <TelemetryGauge 
               label="GPU Utilization" 
-              value={Math.round(telemetry.gpuUtil)} 
+              value={telemetry.gpuUtil} 
               unit="%" 
               max={100} 
               icon={Zap} 
               colorClass="bg-primary shadow-[0_0_10px_var(--primary)]"
+              isLoading={isLoading}
             />
             <TelemetryGauge 
               label="CPU Load" 
-              value={Math.round(telemetry.cpuLoad)} 
+              value={telemetry.cpuLoad} 
               unit="%" 
               max={100} 
               icon={Cpu} 
               colorClass="bg-blue-500"
               warning={80}
               critical={95}
+              isLoading={isLoading}
             />
             <TelemetryGauge 
               label="Unified Memory" 
-              value={Math.round(telemetry.memoryUsed)} 
+              value={telemetry.memoryUsed} 
               unit="GB" 
               max={128} 
               icon={MemoryStick} 
               colorClass="bg-purple-500"
               warning={100}
               critical={120}
+              isLoading={isLoading}
             />
             <TelemetryGauge 
               label="GPU Power" 
-              value={Math.round(telemetry.gpuPower)} 
+              value={telemetry.gpuPower} 
               unit="W" 
               max={100} 
               icon={Zap} 
               colorClass="bg-yellow-500"
               warning={85}
               critical={95}
+              isLoading={isLoading}
             />
             <TelemetryGauge 
               label="GPU Temperature" 
-              value={Math.round(telemetry.gpuTemp)} 
+              value={telemetry.gpuTemp} 
               unit="°C" 
               max={100} 
               icon={Thermometer} 
               colorClass="bg-green-500"
               warning={70}
               critical={85}
+              isLoading={isLoading}
             />
             <TelemetryGauge 
               label="Fan Speed" 
-              value={Math.round(telemetry.fanSpeed)} 
+              value={telemetry.fanSpeed} 
               unit="%" 
               max={100} 
               icon={Fan} 
               colorClass="bg-cyan-500"
+              isLoading={isLoading}
             />
           </div>
         </GlassCard>
@@ -402,17 +442,22 @@ export default function NodesPage() {
               max={telemetry.nvmeTotal} 
               icon={HardDrive} 
               colorClass="bg-emerald-500"
-              warning={1.6}
-              critical={1.9}
+              warning={telemetry.nvmeTotal * 0.8}
+              critical={telemetry.nvmeTotal * 0.95}
+              isLoading={isLoading}
             />
             <div className="grid grid-cols-2 gap-4 pt-2">
               <div className="p-3 rounded-lg bg-white/5 border border-white/10">
                 <div className="text-xs text-muted-foreground mb-1">Network RX</div>
-                <div className="text-lg font-mono font-bold">{Math.round(telemetry.networkRx)} MB/s</div>
+                <div className="text-lg font-mono font-bold">
+                  {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : `${(telemetry.networkRx / 1024).toFixed(1)} GB`}
+                </div>
               </div>
               <div className="p-3 rounded-lg bg-white/5 border border-white/10">
                 <div className="text-xs text-muted-foreground mb-1">Network TX</div>
-                <div className="text-lg font-mono font-bold">{Math.round(telemetry.networkTx)} MB/s</div>
+                <div className="text-lg font-mono font-bold">
+                  {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : `${(telemetry.networkTx / 1024).toFixed(1)} GB`}
+                </div>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">

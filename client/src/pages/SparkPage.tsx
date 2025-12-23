@@ -97,45 +97,7 @@ const jobTemplates = [
   },
 ];
 
-// Mock Data for Active Jobs (will be replaced with API data)
-const mockActiveJobs = [
-  {
-    id: "job-20241218-001",
-    submissionId: "driver-20241218001-0001",
-    name: "ETL_LargeScale_Processing",
-    user: "data_scientist_01",
-    status: "RUNNING",
-    duration: "45m 12s",
-    stages: "12/15",
-    tasks: "450/600",
-    rapids: true,
-    gpuUtil: 85
-  },
-  {
-    id: "job-20241218-002",
-    submissionId: "driver-20241218002-0001",
-    name: "Training_Data_Prep_V2",
-    user: "ml_engineer_03",
-    status: "RUNNING",
-    duration: "12m 05s",
-    stages: "2/8",
-    tasks: "120/800",
-    rapids: true,
-    gpuUtil: 92
-  },
-  {
-    id: "job-20241218-003",
-    submissionId: "driver-20241218003-0001",
-    name: "Log_Analysis_Hourly",
-    user: "system_admin",
-    status: "SUBMITTED",
-    duration: "-",
-    stages: "0/5",
-    tasks: "0/200",
-    rapids: false,
-    gpuUtil: 0
-  }
-];
+// Active jobs will be fetched from the API
 
 const StatusBadge = ({ status }: { status: string }) => {
   const styles: Record<string, string> = {
@@ -461,7 +423,32 @@ function JobSubmissionForm({ onClose }: { onClose: () => void }) {
 
 export default function SparkPage() {
   const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false);
-  const [activeJobs, setActiveJobs] = useState(mockActiveJobs);
+
+  // Fetch active applications from Spark API
+  const applicationsQuery = trpc.spark.getApplications.useQuery(undefined, {
+    refetchInterval: 5000,
+  });
+
+  // Map API data to activeJobs format
+  const activeJobs = React.useMemo(() => {
+    const apps = applicationsQuery.data || [];
+    return apps.map((app, index) => {
+      const latestAttempt = app.attempts?.[0];
+      const duration = latestAttempt?.duration || 0;
+      return {
+        id: app.id || `job-${Date.now()}-${index}`,
+        submissionId: app.id || `driver-${Date.now()}-${index}`,
+        name: app.name || 'Unknown Application',
+        user: latestAttempt?.sparkUser || 'unknown',
+        status: latestAttempt?.completed ? 'FINISHED' : 'RUNNING',
+        duration: duration ? `${Math.floor(duration / 60000)}m ${Math.floor((duration % 60000) / 1000)}s` : '-',
+        stages: '-/-',
+        tasks: '-/-',
+        rapids: false,
+        gpuUtil: 0,
+      };
+    });
+  }, [applicationsQuery.data]);
 
   // Fetch job history from API
   const jobHistoryQuery = trpc.spark.getJobHistory.useQuery(
@@ -674,7 +661,7 @@ export default function SparkPage() {
             <Clock className="h-4 w-4 text-muted-foreground" /> Job History
           </h2>
           <div className="space-y-3 max-h-[300px] overflow-y-auto">
-            {(jobHistoryQuery.data || []).map((job) => (
+            {(jobHistoryQuery.data || []).map((job: { id: string; submissionId: string; appName: string; status: string; enableRapids: boolean; completedAt?: string; submittedAt: string }) => (
               <Link key={job.id} href={`/spark/job/${job.id}`}>
               <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5 hover:bg-white/10 transition-colors cursor-pointer">
                 <div className="flex items-center gap-3">

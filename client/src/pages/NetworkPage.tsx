@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
+import { trpc } from "@/lib/trpc";
 import { 
   Network, 
   ArrowRightLeft, 
@@ -11,12 +12,24 @@ import {
   Router,
   ArrowUp,
   ArrowDown,
-  Server
+  Server,
+  Loader2,
+  RefreshCw
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+
+// Format bytes to human readable
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
 
 // Interface Stats Component
-const InterfaceStat = ({ name, type, speed, tx, rx, status, ip }: {
+const InterfaceStat = ({ name, type, speed, tx, rx, status, ip, mac }: {
   name: string;
   type: string;
   speed: string;
@@ -24,6 +37,7 @@ const InterfaceStat = ({ name, type, speed, tx, rx, status, ip }: {
   rx: string;
   status: string;
   ip?: string;
+  mac?: string;
 }) => (
   <div className="p-4 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
     <div className="flex items-center justify-between mb-3">
@@ -39,8 +53,13 @@ const InterfaceStat = ({ name, type, speed, tx, rx, status, ip }: {
       </div>
     </div>
     {ip && (
-      <div className="text-xs text-muted-foreground mb-3 font-mono">
+      <div className="text-xs text-muted-foreground mb-1 font-mono">
         IP: {ip}
+      </div>
+    )}
+    {mac && (
+      <div className="text-xs text-muted-foreground mb-3 font-mono">
+        MAC: {mac}
       </div>
     )}
     <div className="grid grid-cols-2 gap-3">
@@ -80,7 +99,6 @@ const ConnectionList = () => {
     { remote: "192.168.1.100", port: 22, protocol: "SSH", state: "ESTABLISHED" },
     { remote: "192.168.1.1", port: 443, protocol: "HTTPS", state: "ESTABLISHED" },
     { remote: "172.17.0.2", port: 8080, protocol: "HTTP", state: "ESTABLISHED" },
-    { remote: "127.0.0.1", port: 9090, protocol: "Prometheus", state: "LISTEN" },
     { remote: "127.0.0.1", port: 3000, protocol: "Node.js", state: "LISTEN" },
   ];
 
@@ -112,29 +130,47 @@ const ConnectionList = () => {
 
 export default function NetworkPage() {
   const [bandwidthData, setBandwidthData] = useState<number[]>(Array(20).fill(0));
-  const [stats, setStats] = useState({
-    totalRx: 1.24,
-    totalTx: 0.89,
-    activeConns: 127,
-    blockedReqs: 3
+  
+  // Fetch network data from backend
+  const networkQuery = trpc.local.getNetwork.useQuery(undefined, {
+    refetchInterval: 5000,
   });
 
-  // Simulate bandwidth updates
+  // Fetch health status
+  const healthQuery = trpc.local.health.useQuery(undefined, {
+    refetchInterval: 10000,
+  });
+
+  const interfaces = networkQuery.data?.interfaces || [];
+  
+  // Calculate totals from interfaces
+  const totalRx = interfaces.reduce((sum, iface) => sum + iface.rxBytes, 0);
+  const totalTx = interfaces.reduce((sum, iface) => sum + iface.txBytes, 0);
+  const activeInterfaces = interfaces.filter(iface => iface.status === 'up').length;
+
+  // Simulate bandwidth updates for the chart
   useEffect(() => {
     const timer = setInterval(() => {
       setBandwidthData(prev => {
         const newData = [...prev.slice(1), Math.random() * 100 + 20];
         return newData;
       });
-      setStats(prev => ({
-        ...prev,
-        totalRx: prev.totalRx + Math.random() * 0.01,
-        totalTx: prev.totalTx + Math.random() * 0.008,
-        activeConns: Math.max(100, Math.min(200, prev.activeConns + Math.floor((Math.random() - 0.5) * 10)))
-      }));
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Determine interface type from name
+  const getInterfaceType = (name: string): string => {
+    if (name.startsWith('eth') || name.startsWith('enp') || name.startsWith('eno')) return 'Ethernet';
+    if (name.startsWith('wlan') || name.startsWith('wlp')) return 'WiFi';
+    if (name.startsWith('docker') || name.startsWith('br-')) return 'Docker Bridge';
+    if (name === 'lo') return 'Loopback';
+    if (name.startsWith('veth')) return 'Virtual Ethernet';
+    if (name.startsWith('virbr')) return 'Virtual Bridge';
+    return 'Network Interface';
+  };
+
+  const isLoading = networkQuery.isLoading;
 
   return (
     <div className="space-y-6 pb-10">
@@ -142,11 +178,34 @@ export default function NetworkPage() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-display font-bold tracking-tight">Network Monitor</h1>
-          <p className="text-muted-foreground">Local interface monitoring and connectivity</p>
+          <p className="text-muted-foreground">
+            Local interface monitoring and connectivity
+            {networkQuery.data && (
+              <span className="ml-2 text-xs text-muted-foreground">
+                (Source: local)
+              </span>
+            )}
+          </p>
         </div>
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400 text-sm">
-          <Wifi className="h-4 w-4" />
-          All Interfaces Online
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => networkQuery.refetch()}
+            disabled={networkQuery.isFetching}
+          >
+            <RefreshCw className={cn("h-4 w-4 mr-2", networkQuery.isFetching && "animate-spin")} />
+            Refresh
+          </Button>
+          <div className={cn(
+            "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm",
+            activeInterfaces > 0 
+              ? "bg-green-500/10 border border-green-500/20 text-green-400"
+              : "bg-red-500/10 border border-red-500/20 text-red-400"
+          )}>
+            <Wifi className="h-4 w-4" />
+            {activeInterfaces > 0 ? `${activeInterfaces} Interface${activeInterfaces > 1 ? 's' : ''} Online` : 'No Interfaces'}
+          </div>
         </div>
       </div>
 
@@ -154,23 +213,35 @@ export default function NetworkPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <GlassCard className="text-center">
           <ArrowDown className="h-5 w-5 text-blue-400 mx-auto mb-2" />
-          <div className="text-2xl font-mono font-bold">{stats.totalRx.toFixed(2)} TB</div>
+          {isLoading ? (
+            <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+          ) : (
+            <div className="text-2xl font-mono font-bold">{formatBytes(totalRx)}</div>
+          )}
           <div className="text-xs text-muted-foreground">Total Received</div>
         </GlassCard>
         <GlassCard className="text-center">
           <ArrowUp className="h-5 w-5 text-primary mx-auto mb-2" />
-          <div className="text-2xl font-mono font-bold">{stats.totalTx.toFixed(2)} TB</div>
+          {isLoading ? (
+            <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+          ) : (
+            <div className="text-2xl font-mono font-bold">{formatBytes(totalTx)}</div>
+          )}
           <div className="text-xs text-muted-foreground">Total Sent</div>
         </GlassCard>
         <GlassCard className="text-center">
           <Activity className="h-5 w-5 text-green-400 mx-auto mb-2" />
-          <div className="text-2xl font-mono font-bold">{stats.activeConns}</div>
-          <div className="text-xs text-muted-foreground">Active Connections</div>
+          {isLoading ? (
+            <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+          ) : (
+            <div className="text-2xl font-mono font-bold">{interfaces.length}</div>
+          )}
+          <div className="text-xs text-muted-foreground">Interfaces</div>
         </GlassCard>
         <GlassCard className="text-center">
           <ShieldCheck className="h-5 w-5 text-yellow-400 mx-auto mb-2" />
-          <div className="text-2xl font-mono font-bold">{stats.blockedReqs}</div>
-          <div className="text-xs text-muted-foreground">Blocked (24h)</div>
+          <div className="text-2xl font-mono font-bold">{activeInterfaces}</div>
+          <div className="text-xs text-muted-foreground">Active</div>
         </GlassCard>
       </div>
 
@@ -211,8 +282,13 @@ export default function NetworkPage() {
               <span className="font-mono">22, 80, 443, 3000</span>
             </div>
             <div className="flex justify-between items-center text-sm">
-              <span className="text-muted-foreground">Last Scan</span>
-              <span className="font-mono text-muted-foreground">2 mins ago</span>
+              <span className="text-muted-foreground">Health Status</span>
+              <span className={cn(
+                "font-mono",
+                healthQuery.data?.status === 'healthy' ? "text-green-400" : "text-yellow-400"
+              )}>
+                {healthQuery.data?.status || 'checking...'}
+              </span>
             </div>
           </div>
         </GlassCard>
@@ -222,44 +298,32 @@ export default function NetworkPage() {
           <h2 className="text-lg font-display font-bold mb-4 flex items-center gap-2">
             <Cable className="h-5 w-5 text-primary" /> Network Interfaces
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <InterfaceStat 
-              name="eth0" 
-              type="Ethernet (Primary)"
-              speed="10 Gbps" 
-              tx="125 MB/s" 
-              rx="89 MB/s" 
-              status="up"
-              ip="192.168.1.50"
-            />
-            <InterfaceStat 
-              name="wlan0" 
-              type="WiFi 6E"
-              speed="2.4 Gbps" 
-              tx="45 MB/s" 
-              rx="32 MB/s" 
-              status="up"
-              ip="192.168.1.51"
-            />
-            <InterfaceStat 
-              name="docker0" 
-              type="Docker Bridge"
-              speed="Virtual" 
-              tx="1.2 GB/s" 
-              rx="1.2 GB/s" 
-              status="up"
-              ip="172.17.0.1"
-            />
-            <InterfaceStat 
-              name="lo" 
-              type="Loopback"
-              speed="Local" 
-              tx="500 MB/s" 
-              rx="500 MB/s" 
-              status="up"
-              ip="127.0.0.1"
-            />
-          </div>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : interfaces.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <Cable className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No network interfaces found</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {interfaces.map((iface) => (
+                <InterfaceStat 
+                  key={iface.name}
+                  name={iface.name} 
+                  type={getInterfaceType(iface.name)}
+                  speed={iface.speed || 'N/A'} 
+                  tx={formatBytes(iface.txBytes)} 
+                  rx={formatBytes(iface.rxBytes)} 
+                  status={iface.status}
+                  ip={iface.ip !== 'N/A' ? iface.ip : undefined}
+                  mac={iface.mac !== 'N/A' ? iface.mac : undefined}
+                />
+              ))}
+            </div>
+          )}
         </GlassCard>
 
         {/* Active Connections */}
@@ -279,13 +343,13 @@ export default function NetworkPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
             { name: "Command Center", port: 3000, status: "running" },
-            { name: "Prometheus", port: 9090, status: "running" },
             { name: "DCGM Exporter", port: 9400, status: "running" },
             { name: "Node Exporter", port: 9100, status: "running" },
             { name: "Spark Master", port: 7077, status: "running" },
             { name: "Spark UI", port: 8080, status: "running" },
             { name: "Jupyter Lab", port: 8888, status: "running" },
             { name: "vLLM Server", port: 8000, status: "running" },
+            { name: "ExtraHop Agent", port: 443, status: "pending" },
           ].map((service) => (
             <div key={service.name} className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
               <div>
@@ -294,7 +358,8 @@ export default function NetworkPage() {
               </div>
               <div className={cn(
                 "h-2 w-2 rounded-full",
-                service.status === "running" ? "bg-green-500 shadow-[0_0_5px_#22c55e]" : "bg-red-500"
+                service.status === "running" ? "bg-green-500 shadow-[0_0_5px_#22c55e]" : 
+                service.status === "pending" ? "bg-yellow-500" : "bg-red-500"
               )} />
             </div>
           ))}
