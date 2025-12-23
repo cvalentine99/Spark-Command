@@ -7,7 +7,6 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { initWebSocket, cleanupWebSocket } from "../websocket";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -58,37 +57,9 @@ async function startServer() {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
 
-  // Initialize WebSocket server for real-time updates
-  initWebSocket(server);
-
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
-    console.log(`WebSocket available at ws://localhost:${port}/ws`);
   });
-
-  // Graceful shutdown handlers
-  const gracefulShutdown = (signal: string) => {
-    console.log(`\n${signal} received. Shutting down gracefully...`);
-    
-    // Cleanup WebSocket connections and intervals
-    cleanupWebSocket();
-    console.log('WebSocket connections closed');
-    
-    // Close HTTP server
-    server.close(() => {
-      console.log('HTTP server closed');
-      process.exit(0);
-    });
-
-    // Force exit after 10 seconds if graceful shutdown fails
-    setTimeout(() => {
-      console.error('Forced shutdown after timeout');
-      process.exit(1);
-    }, 10000);
-  };
-
-  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 }
 
 startServer().catch(console.error);

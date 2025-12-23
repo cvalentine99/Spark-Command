@@ -6,30 +6,6 @@ import * as fs from "fs/promises";
 
 const execAsync = promisify(exec);
 
-// Input sanitization helpers to prevent command injection
-function sanitizeTimestamp(input: string): string | null {
-  // Only allow ISO 8601 timestamps or relative time formats like "1 hour ago"
-  const isoPattern = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?)?$/;
-  const relativePattern = /^\d+\s+(second|minute|hour|day|week|month)s?\s+ago$/i;
-  if (isoPattern.test(input) || relativePattern.test(input)) {
-    return input;
-  }
-  return null;
-}
-
-function sanitizeServiceName(input: string): string | null {
-  // Only allow alphanumeric, hyphens, underscores, and dots
-  const servicePattern = /^[a-zA-Z0-9_.-]+$/;
-  if (servicePattern.test(input) && input.length <= 64) {
-    return input;
-  }
-  return null;
-}
-
-function sanitizeNumber(input: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, Math.floor(input)));
-}
-
 // Log entry schema
 const LogEntrySchema = z.object({
   timestamp: z.string(),
@@ -216,27 +192,16 @@ export const logsRouter = router({
       const { limit, services, levels, since, search } = input;
 
       try {
-        // Try journalctl first - sanitize all inputs to prevent command injection
-        const safeLimit = sanitizeNumber(limit, 10, 1000);
-        const args: string[] = ['journalctl', '--output=json', `-n`, `${safeLimit}`, '--no-pager'];
-        
+        // Try journalctl first
+        let cmd = `journalctl --output=json -n ${limit} --no-pager`;
         if (since) {
-          const safeSince = sanitizeTimestamp(since);
-          if (safeSince) {
-            args.push(`--since=${safeSince}`);
-          }
+          cmd += ` --since="${since}"`;
         }
-        
         if (services && services.length > 0) {
-          for (const service of services) {
-            const safeService = sanitizeServiceName(service);
-            if (safeService) {
-              args.push('-t', safeService);
-            }
-          }
+          cmd += ` -t ${services.join(" -t ")}`;
         }
 
-        const { stdout } = await execAsync(args.join(' '), { timeout: 5000 });
+        const { stdout } = await execAsync(cmd, { timeout: 5000 });
         const lines = stdout.trim().split("\n").filter(Boolean);
         let logs = lines
           .map((line) => {
@@ -372,17 +337,12 @@ export const logsRouter = router({
       const { lastTimestamp, services, levels } = input;
 
       try {
-        // Sanitize inputs to prevent command injection
-        const args: string[] = ['journalctl', '--output=json', '-n', '20', '--no-pager'];
-        
+        let cmd = "journalctl --output=json -n 20 --no-pager";
         if (lastTimestamp) {
-          const safeSince = sanitizeTimestamp(lastTimestamp);
-          if (safeSince) {
-            args.push(`--since=${safeSince}`);
-          }
+          cmd += ` --since="${lastTimestamp}"`;
         }
 
-        const { stdout } = await execAsync(args.join(' '), { timeout: 3000 });
+        const { stdout } = await execAsync(cmd, { timeout: 3000 });
         const lines = stdout.trim().split("\n").filter(Boolean);
         let logs = lines
           .map((line) => {

@@ -152,8 +152,8 @@ export function MainLayout({ children }: MainLayoutProps) {
           </div>
         </header>
 
-        {/* Page Content - Responsive padding for ultrawide */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 2xl:p-8 [@media(min-width:2560px)]:p-10 [@media(min-width:3440px)]:p-12 relative">
+        {/* Page Content */}
+        <main className="flex-1 overflow-y-auto p-6 relative">
           {/* Background Grid Pattern */}
           {/* Animated Grid Background */}
           <div className="absolute inset-0 pointer-events-none opacity-[0.03]" 
@@ -168,8 +168,7 @@ export function MainLayout({ children }: MainLayoutProps) {
           <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-primary/5 blur-[120px] pointer-events-none animate-pulse" style={{ animationDuration: '8s' }} />
           <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-purple-500/5 blur-[120px] pointer-events-none animate-pulse" style={{ animationDuration: '12s' }} />
           
-          {/* Container scales with ultrawide breakpoints */}
-          <div className="container mx-auto max-w-7xl 2xl:max-w-[1600px] [@media(min-width:2560px)]:max-w-[2200px] [@media(min-width:3440px)]:max-w-[3000px] relative z-10">
+          <div className="container mx-auto max-w-7xl relative z-10">
             {children}
           </div>
         </main>

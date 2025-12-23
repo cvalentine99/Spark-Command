@@ -5,7 +5,6 @@ import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { trpc } from "@/lib/trpc";
-import { useWebSocketContext } from "@/contexts/WebSocketContext";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -77,13 +76,9 @@ export default function PowerPage() {
     action: () => void;
   }>({ open: false, title: "", description: "", action: () => {} });
 
-  // Use WebSocket for real-time GPU metrics
-  const { gpuMetrics, isConnected } = useWebSocketContext();
-
-  // Fetch power state from backend (reduced polling when WebSocket connected)
+  // Fetch power state from backend
   const powerStateQuery = trpc.power.getPowerState.useQuery(undefined, {
-    refetchInterval: isConnected ? false : 3000, // Only poll if WebSocket disconnected
-    enabled: !isConnected || !gpuMetrics,
+    refetchInterval: 2000,
   });
 
   // Fetch thermal profiles from backend
@@ -154,18 +149,7 @@ export default function PowerPage() {
     },
   });
 
-  // Prefer WebSocket data for real-time metrics, fall back to API data
-  const apiPowerState = powerStateQuery.data?.state;
-  const powerState = gpuMetrics ? {
-    ...apiPowerState,
-    temperature: gpuMetrics.temperature,
-    powerDraw: gpuMetrics.powerDraw,
-    powerLimit: gpuMetrics.powerLimit || apiPowerState?.powerLimit || 250,
-    fanSpeed: gpuMetrics.fanSpeed,
-    fanMode: apiPowerState?.fanMode || 'auto',
-    utilization: gpuMetrics.utilization,
-  } : apiPowerState;
-  
+  const powerState = powerStateQuery.data?.state;
   const thermalProfiles = profilesQuery.data?.profiles || [];
   const powerHistory = historyQuery.data?.history.map(p => ({
     time: new Date(p.timestamp).toLocaleTimeString(),
@@ -292,8 +276,8 @@ export default function PowerPage() {
         </Button>
       </div>
 
-      {/* Current Status - Expands on ultrawide */}
-      <div className="grid grid-cols-2 md:grid-cols-4 grid-cols-ultrawide-4 grid-cols-superwide-6 grid-cols-megawide-8 gap-4 2xl:gap-6">
+      {/* Current Status */}
+      <div className="grid grid-cols-4 gap-4">
         <GlassCard className="p-4">
           <div className="flex items-center gap-2 text-gray-400 text-sm mb-1">
             <Zap className="w-4 h-4" /> Power Draw
@@ -388,8 +372,8 @@ export default function PowerPage() {
         </GlassCard>
       </div>
 
-      {/* Main Controls - Expands on ultrawide */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 grid-cols-ultrawide-4 grid-cols-superwide-4 gap-6 2xl:gap-8">
+      {/* Main Controls */}
+      <div className="grid grid-cols-2 gap-6">
         {/* Power Limit Control */}
         <GlassCard className="p-6">
           <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
@@ -490,7 +474,7 @@ export default function PowerPage() {
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 grid-cols-ultrawide-4 grid-cols-superwide-6 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             {thermalProfiles.map((profile) => (
               <div
                 key={profile.name}

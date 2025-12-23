@@ -46,7 +46,6 @@ import { cn } from "@/lib/utils";
 import { Link } from "wouter";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { useWebSocketContext } from "@/contexts/WebSocketContext";
 import { JobScheduler } from "@/components/spark/JobScheduler";
 import { CostEstimator } from "@/components/spark/CostEstimator";
 
@@ -424,13 +423,10 @@ function JobSubmissionForm({ onClose }: { onClose: () => void }) {
 
 export default function SparkPage() {
   const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false);
-  
-  // Use WebSocket for real-time job status updates
-  const { jobUpdates, isConnected } = useWebSocketContext();
 
-  // Fetch active applications from Spark API (reduced polling when WebSocket connected)
+  // Fetch active applications from Spark API
   const applicationsQuery = trpc.spark.getApplications.useQuery(undefined, {
-    refetchInterval: isConnected ? 10000 : 5000, // Slower polling when WebSocket provides updates
+    refetchInterval: 5000,
   });
 
   // Map API data to activeJobs format
@@ -454,18 +450,11 @@ export default function SparkPage() {
     });
   }, [applicationsQuery.data]);
 
-  // Fetch job history from API (refetch when WebSocket reports job updates)
+  // Fetch job history from API
   const jobHistoryQuery = trpc.spark.getJobHistory.useQuery(
     { limit: 20, status: 'all' },
-    { refetchInterval: isConnected ? 30000 : 10000 } // Slower polling, WebSocket triggers updates
+    { refetchInterval: 10000 }
   );
-
-  // Refetch job history when WebSocket reports a job status change
-  React.useEffect(() => {
-    if (jobUpdates.length > 0 && isConnected) {
-      jobHistoryQuery.refetch();
-    }
-  }, [jobUpdates, isConnected]);
 
   // Fetch cluster resources
   const clusterResourcesQuery = trpc.spark.getClusterResources.useQuery(undefined, {
@@ -522,8 +511,8 @@ export default function SparkPage() {
         </Dialog>
       </div>
 
-      {/* Top Metrics - Expands on ultrawide */}
-      <div className="grid grid-cols-1 md:grid-cols-4 grid-cols-ultrawide-4 grid-cols-superwide-6 grid-cols-megawide-8 gap-4 2xl:gap-6">
+      {/* Top Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <GlassCard className="flex items-center gap-4">
           <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
             <Zap className="h-6 w-6 text-primary" />
@@ -665,8 +654,8 @@ export default function SparkPage() {
         </div>
       </GlassCard>
 
-      {/* Job History and Executor Distribution - Expands on ultrawide */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 grid-cols-ultrawide-4 grid-cols-superwide-4 gap-6 2xl:gap-8">
+      {/* Job History and Executor Distribution */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <GlassCard>
           <h2 className="text-lg font-display font-bold mb-4 flex items-center gap-2">
             <Clock className="h-4 w-4 text-muted-foreground" /> Job History

@@ -199,8 +199,8 @@ export default function LogsPage() {
         </div>
       </div>
 
-      {/* Stats Bar - Expands on ultrawide */}
-      <div className="grid grid-cols-2 md:grid-cols-4 grid-cols-ultrawide-4 grid-cols-superwide-6 grid-cols-megawide-8 gap-4 2xl:gap-6">
+      {/* Stats Bar */}
+      <div className="grid grid-cols-4 gap-4">
         <GlassCard className="p-4">
           <div className="text-sm text-gray-400">Total Logs</div>
           <div className="text-2xl font-bold text-white">{stats.total}</div>
