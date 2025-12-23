@@ -34,6 +34,26 @@ dgx-spark-command-center/
 
 ## Quick Start
 
+### Option 0: Single DGX Spark Local Install (RECOMMENDED)
+
+Run this directly on your DGX Spark unit:
+
+```bash
+# Clone or extract the package
+cd dgx-spark-command-center
+
+# One-command install
+./install.sh
+```
+
+That's it! Access the Command Center at `http://localhost` or `http://<your-dgx-ip>`.
+
+The install script will:
+1. Detect your GPU and system configuration
+2. Install Docker and NVIDIA Container Toolkit if needed
+3. Build the Command Center container with GPU access
+4. Start the application
+
 ### Option 1: Demo Mode (No Hardware Required)
 
 ```bash

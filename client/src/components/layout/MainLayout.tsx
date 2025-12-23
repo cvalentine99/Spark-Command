@@ -26,7 +26,7 @@ export function MainLayout({ children }: MainLayoutProps) {
 
   const navItems = [
     { name: "Dashboard", path: "/", icon: LayoutDashboard },
-    { name: "Nodes", path: "/nodes", icon: Server },
+    { name: "Hardware", path: "/nodes", icon: Server },
     { name: "Spark Engine", path: "/spark", icon: Zap },
     { name: "Inference", path: "/inference", icon: BrainCircuit },
     { name: "Network", path: "/network", icon: Network },
@@ -87,7 +87,7 @@ export function MainLayout({ children }: MainLayoutProps) {
           {isSidebarOpen ? (
             <div className="space-y-3">
               <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>Cluster Status</span>
+                <span>System Status</span>
                 <span className="text-green-400 flex items-center gap-1">
                   <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse" /> Online
                 </span>

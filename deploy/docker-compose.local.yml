@@ -1,0 +1,62 @@
+# ============================================================================
+# DGX Spark Command Center - Single Node Local Deployment
+# ============================================================================
+# Run this directly on your DGX Spark unit:
+#   docker compose -f docker-compose.local.yml up -d
+# ============================================================================
+
+services:
+  # ==========================================================================
+  # Command Center Application
+  # ==========================================================================
+  command-center:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.local
+    container_name: dgx-spark-cc
+    restart: unless-stopped
+    ports:
+      - "80:3000"
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=${DATABASE_URL:-}
+      - JWT_SECRET=${JWT_SECRET:-local-dev-secret-change-in-production}
+    volumes:
+      # Mount for local metrics access (read-only)
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /etc/hostname:/host/hostname:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/trpc/local.health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - dgx-network
+
+  # ==========================================================================
+  # Optional: Local SQLite for persistence (no external DB required)
+  # ==========================================================================
+  # Uncomment if you want persistent storage for settings/alerts
+  # sqlite-data:
+  #   image: alpine:latest
+  #   volumes:
+  #     - sqlite-data:/data
+  #   command: ["tail", "-f", "/dev/null"]
+
+networks:
+  dgx-network:
+    driver: bridge
+
+# volumes:
+#   sqlite-data:

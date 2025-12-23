@@ -63,3 +63,13 @@
 - [x] Add proper multi-stage build for frontend and backend
 - [x] Update docker-compose with correct volume mounts
 - [x] Test build locally to verify all components work
+
+## Single-Node Local Command Center Refactor
+- [x] Update Dashboard to show single DGX Spark unit (remove dual-node view)
+- [x] Update Nodes page to show local GPU only (GB10 Superchip)
+- [x] Simplify Network page for local interfaces only
+- [x] Update backend to query localhost metrics only
+- [x] Create local-only deployment script (install.sh)
+- [x] Create Dockerfile.local for single-node deployment
+- [x] Create docker-compose.local.yml for local installation
+- [x] Add local system info (hostname, uptime, OS version)
