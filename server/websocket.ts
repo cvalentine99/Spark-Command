@@ -220,13 +220,14 @@ export function getConnectedClients(): number {
 
 /**
  * Create a WebSocket message (exported for testing)
+ * Note: timestamp is a number (Unix epoch ms) to match WSMessage interface
  */
 export function createWebSocketMessage(type: WSMessageType, data: unknown): string {
   return JSON.stringify({
     type,
-    timestamp: new Date().toISOString(),
+    timestamp: Date.now(),
     data,
-  });
+  } as WSMessage);
 }
 
 /**

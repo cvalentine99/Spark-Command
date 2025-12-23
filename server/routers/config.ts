@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { publicProcedure, router } from "../_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "../_core/trpc";
 import * as fs from "fs/promises";
 import * as path from "path";
 
@@ -147,15 +147,44 @@ const defaultConfig: Config = {
   },
 };
 
-// Config file path
-const CONFIG_DIR = "/tmp/dgx-spark-config";
+// Config file path - use secure location instead of /tmp
+const CONFIG_DIR = process.env.CONFIG_DIR || path.join(process.cwd(), ".dgx-spark-config");
 const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
 const BACKUP_DIR = path.join(CONFIG_DIR, "backups");
 
+// Validate filename to prevent path traversal attacks
+function validateFilename(filename: string): string {
+  // Only allow alphanumeric, hyphens, underscores, dots, and must end with .json
+  const safePattern = /^[a-zA-Z0-9_.-]+\.json$/;
+  if (!safePattern.test(filename)) {
+    throw new Error('Invalid filename: must be alphanumeric with .json extension');
+  }
+  // Ensure no path separators
+  if (filename.includes('/') || filename.includes('\\') || filename.includes('..')) {
+    throw new Error('Invalid filename: path traversal not allowed');
+  }
+  // Limit filename length
+  if (filename.length > 128) {
+    throw new Error('Invalid filename: too long');
+  }
+  return filename;
+}
+
+// Validate backup name input
+function validateBackupName(name: string | undefined): string | undefined {
+  if (!name) return undefined;
+  // Only allow alphanumeric, hyphens, underscores
+  const safePattern = /^[a-zA-Z0-9_-]+$/;
+  if (!safePattern.test(name) || name.length > 64) {
+    throw new Error('Invalid backup name: must be alphanumeric with hyphens/underscores only');
+  }
+  return name;
+}
+
 // Ensure directories exist
 async function ensureDirectories() {
-  await fs.mkdir(CONFIG_DIR, { recursive: true });
-  await fs.mkdir(BACKUP_DIR, { recursive: true });
+  await fs.mkdir(CONFIG_DIR, { recursive: true, mode: 0o700 });
+  await fs.mkdir(BACKUP_DIR, { recursive: true, mode: 0o700 });
 }
 
 // Load current config
@@ -182,8 +211,8 @@ export const configRouter = router({
     return { config };
   }),
 
-  // Update configuration
-  updateConfig: publicProcedure
+  // Update configuration - requires authentication
+  updateConfig: protectedProcedure
     .input(ConfigSchema.partial())
     .mutation(async ({ input }) => {
       const current = await loadConfig();
@@ -210,8 +239,8 @@ export const configRouter = router({
     };
   }),
 
-  // Import configuration
-  importConfig: publicProcedure
+  // Import configuration - requires authentication
+  importConfig: protectedProcedure
     .input(z.object({ configJson: z.string() }))
     .mutation(async ({ input }) => {
       try {
@@ -245,15 +274,18 @@ export const configRouter = router({
       }
     }),
 
-  // Create backup
-  createBackup: publicProcedure
+  // Create backup - requires authentication
+  createBackup: protectedProcedure
     .input(z.object({ name: z.string().optional() }))
     .mutation(async ({ input }) => {
       await ensureDirectories();
       const config = await loadConfig();
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const backupName = input.name
-        ? `${input.name}-${timestamp}.json`
+      
+      // Validate backup name to prevent injection
+      const safeName = validateBackupName(input.name);
+      const backupName = safeName
+        ? `${safeName}-${timestamp}.json`
         : `backup-${timestamp}.json`;
       
       await fs.writeFile(
@@ -297,12 +329,22 @@ export const configRouter = router({
     }
   }),
 
-  // Restore from backup
-  restoreBackup: publicProcedure
+  // Restore from backup - requires authentication
+  restoreBackup: protectedProcedure
     .input(z.object({ filename: z.string() }))
     .mutation(async ({ input }) => {
       try {
-        const backupPath = path.join(BACKUP_DIR, input.filename);
+        // Validate filename to prevent path traversal
+        const safeFilename = validateFilename(input.filename);
+        const backupPath = path.join(BACKUP_DIR, safeFilename);
+        
+        // Verify the resolved path is within BACKUP_DIR
+        const resolvedPath = path.resolve(backupPath);
+        const resolvedBackupDir = path.resolve(BACKUP_DIR);
+        if (!resolvedPath.startsWith(resolvedBackupDir)) {
+          throw new Error('Invalid backup path');
+        }
+        
         const content = await fs.readFile(backupPath, "utf-8");
         const config = ConfigSchema.parse(JSON.parse(content));
         
@@ -329,20 +371,31 @@ export const configRouter = router({
       }
     }),
 
-  // Delete backup
-  deleteBackup: publicProcedure
+  // Delete backup - requires authentication
+  deleteBackup: protectedProcedure
     .input(z.object({ filename: z.string() }))
     .mutation(async ({ input }) => {
       try {
-        await fs.unlink(path.join(BACKUP_DIR, input.filename));
+        // Validate filename to prevent path traversal
+        const safeFilename = validateFilename(input.filename);
+        const filePath = path.join(BACKUP_DIR, safeFilename);
+        
+        // Verify the resolved path is within BACKUP_DIR
+        const resolvedPath = path.resolve(filePath);
+        const resolvedBackupDir = path.resolve(BACKUP_DIR);
+        if (!resolvedPath.startsWith(resolvedBackupDir)) {
+          throw new Error('Invalid backup path');
+        }
+        
+        await fs.unlink(filePath);
         return { success: true, message: `Deleted ${input.filename}` };
       } catch (error: any) {
         return { success: false, message: `Delete failed: ${error.message}` };
       }
     }),
 
-  // Reset to defaults
-  resetToDefaults: publicProcedure.mutation(async () => {
+  // Reset to defaults - requires authentication
+  resetToDefaults: protectedProcedure.mutation(async () => {
     // Create backup first
     const current = await loadConfig();
     const backupName = `pre-reset-${Date.now()}.json`;

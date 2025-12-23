@@ -1,9 +1,44 @@
 import { z } from "zod";
-import { publicProcedure, router } from "../_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "../_core/trpc";
 import { exec } from "child_process";
 import { promisify } from "util";
 
 const execAsync = promisify(exec);
+
+// Strict input validation to prevent command injection
+function validateGpuIndex(index: number): number {
+  // Only allow valid GPU indices (0-7 for typical multi-GPU systems)
+  const safeIndex = Math.floor(index);
+  if (safeIndex < 0 || safeIndex > 7 || !Number.isInteger(safeIndex)) {
+    throw new Error('Invalid GPU index');
+  }
+  return safeIndex;
+}
+
+function validatePowerLimit(limit: number, min: number = 100, max: number = 400): number {
+  const safeLimit = Math.floor(limit);
+  if (safeLimit < min || safeLimit > max || !Number.isFinite(safeLimit)) {
+    throw new Error(`Power limit must be between ${min}W and ${max}W`);
+  }
+  return safeLimit;
+}
+
+function validateFanSpeed(speed: number): number {
+  const safeSpeed = Math.floor(speed);
+  if (safeSpeed < 0 || safeSpeed > 100 || !Number.isFinite(safeSpeed)) {
+    throw new Error('Fan speed must be between 0% and 100%');
+  }
+  return safeSpeed;
+}
+
+function validateProfileName(name: string): string {
+  // Only allow known profile names
+  const validProfiles = ['Quiet', 'Balanced', 'Performance', 'Max Performance'];
+  if (!validProfiles.includes(name)) {
+    throw new Error(`Invalid profile name: ${name}`);
+  }
+  return name;
+}
 
 // Power state schema
 const PowerStateSchema = z.object({
@@ -147,91 +182,96 @@ export const powerRouter = router({
     }
   }),
 
-  // Set power limit
-  setPowerLimit: publicProcedure
+  // Set power limit - requires authentication
+  setPowerLimit: protectedProcedure
     .input(
       z.object({
-        gpuIndex: z.number().default(0),
-        powerLimit: z.number().min(100).max(400),
+        gpuIndex: z.number().int().min(0).max(7).default(0),
+        powerLimit: z.number().int().min(100).max(400),
       })
     )
     .mutation(async ({ input }) => {
-      const { gpuIndex, powerLimit } = input;
+      // Validate and sanitize inputs to prevent command injection
+      const safeGpuIndex = validateGpuIndex(input.gpuIndex);
+      const safePowerLimit = validatePowerLimit(input.powerLimit);
 
       try {
         // Enable persistence mode first
         await execAsync("sudo nvidia-smi -pm 1", { timeout: 5000 });
         
-        // Set power limit
+        // Set power limit with validated integers only
         const { stdout } = await execAsync(
-          `sudo nvidia-smi -i ${gpuIndex} -pl ${powerLimit}`,
+          `sudo nvidia-smi -i ${safeGpuIndex} -pl ${safePowerLimit}`,
           { timeout: 5000 }
         );
 
         return {
           success: true,
-          message: `Power limit set to ${powerLimit}W`,
+          message: `Power limit set to ${safePowerLimit}W`,
           output: stdout.trim(),
         };
       } catch (error: any) {
         // In demo mode, simulate success
         return {
           success: true,
-          message: `Power limit set to ${powerLimit}W (simulated)`,
+          message: `Power limit set to ${safePowerLimit}W (simulated)`,
           output: "Demo mode - command simulated",
           simulated: true,
         };
       }
     }),
 
-  // Set fan speed (manual mode)
-  setFanSpeed: publicProcedure
+  // Set fan speed (manual mode) - requires authentication
+  setFanSpeed: protectedProcedure
     .input(
       z.object({
-        gpuIndex: z.number().default(0),
-        fanSpeed: z.number().min(0).max(100),
+        gpuIndex: z.number().int().min(0).max(7).default(0),
+        fanSpeed: z.number().int().min(0).max(100),
       })
     )
     .mutation(async ({ input }) => {
-      const { gpuIndex, fanSpeed } = input;
+      // Validate and sanitize inputs to prevent command injection
+      const safeGpuIndex = validateGpuIndex(input.gpuIndex);
+      const safeFanSpeed = validateFanSpeed(input.fanSpeed);
 
       try {
-        // Enable manual fan control
+        // Enable manual fan control with validated integers only
         await execAsync(
-          `sudo nvidia-settings -a "[gpu:${gpuIndex}]/GPUFanControlState=1"`,
+          `sudo nvidia-settings -a "[gpu:${safeGpuIndex}]/GPUFanControlState=1"`,
           { timeout: 5000 }
         );
         
-        // Set fan speed
+        // Set fan speed with validated integers only
         const { stdout } = await execAsync(
-          `sudo nvidia-settings -a "[fan:${gpuIndex}]/GPUTargetFanSpeed=${fanSpeed}"`,
+          `sudo nvidia-settings -a "[fan:${safeGpuIndex}]/GPUTargetFanSpeed=${safeFanSpeed}"`,
           { timeout: 5000 }
         );
 
         return {
           success: true,
-          message: `Fan speed set to ${fanSpeed}%`,
+          message: `Fan speed set to ${safeFanSpeed}%`,
           output: stdout.trim(),
         };
       } catch (error: any) {
         return {
           success: true,
-          message: `Fan speed set to ${fanSpeed}% (simulated)`,
+          message: `Fan speed set to ${safeFanSpeed}% (simulated)`,
           output: "Demo mode - command simulated",
           simulated: true,
         };
       }
     }),
 
-  // Reset fan to auto mode
-  resetFanAuto: publicProcedure
-    .input(z.object({ gpuIndex: z.number().default(0) }))
+  // Reset fan to auto mode - requires authentication
+  resetFanAuto: protectedProcedure
+    .input(z.object({ gpuIndex: z.number().int().min(0).max(7).default(0) }))
     .mutation(async ({ input }) => {
-      const { gpuIndex } = input;
+      // Validate input to prevent command injection
+      const safeGpuIndex = validateGpuIndex(input.gpuIndex);
 
       try {
         const { stdout } = await execAsync(
-          `sudo nvidia-settings -a "[gpu:${gpuIndex}]/GPUFanControlState=0"`,
+          `sudo nvidia-settings -a "[gpu:${safeGpuIndex}]/GPUFanControlState=0"`,
           { timeout: 5000 }
         );
 
@@ -255,19 +295,22 @@ export const powerRouter = router({
     return { profiles: thermalProfiles };
   }),
 
-  // Apply thermal profile
-  applyThermalProfile: publicProcedure
+  // Apply thermal profile - requires authentication
+  applyThermalProfile: protectedProcedure
     .input(z.object({ profileName: z.string() }))
     .mutation(async ({ input }) => {
-      const profile = thermalProfiles.find((p) => p.name === input.profileName);
+      // Validate profile name to prevent injection
+      const safeProfileName = validateProfileName(input.profileName);
+      const profile = thermalProfiles.find((p) => p.name === safeProfileName);
       if (!profile) {
-        throw new Error(`Profile "${input.profileName}" not found`);
+        throw new Error(`Profile "${safeProfileName}" not found`);
       }
 
       try {
-        // Apply power limit
+        // Apply power limit with validated profile power limit
+        const safePowerLimit = validatePowerLimit(profile.powerLimit);
         await execAsync("sudo nvidia-smi -pm 1", { timeout: 5000 });
-        await execAsync(`sudo nvidia-smi -pl ${profile.powerLimit}`, {
+        await execAsync(`sudo nvidia-smi -pl ${safePowerLimit}`, {
           timeout: 5000,
         });
 
@@ -306,8 +349,8 @@ export const powerRouter = router({
       return { history: points };
     }),
 
-  // Reset to defaults
-  resetToDefaults: publicProcedure.mutation(async () => {
+  // Reset to defaults - requires authentication
+  resetToDefaults: protectedProcedure.mutation(async () => {
     try {
       await execAsync("sudo nvidia-smi -pm 1", { timeout: 5000 });
       const { stdout: defaultLimit } = await execAsync(

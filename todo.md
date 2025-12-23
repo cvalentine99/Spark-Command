@@ -129,3 +129,15 @@
 - [x] Update PowerPage layout for ultrawide
 - [x] Update MainLayout content max-width for ultrawide
 - [x] Add container queries for better component scaling
+
+## Security Fixes (Code Review)
+- [x] Fix command injection in logs.ts - sanitize since, services parameters
+- [x] Fix command injection in power.ts - validate gpuIndex, powerLimit strictly
+- [x] Fix path traversal in config.ts - validate filename parameter
+- [x] Apply protectedProcedure to power.ts sensitive operations
+- [x] Apply protectedProcedure to config.ts sensitive operations
+- [x] Fix WebSocket timestamp type mismatch (number vs string)
+- [x] Fix websocket.test.ts invalid 'test' type
+- [x] Remove duplicate localMetrics.ts (only local-metrics.ts exists - no duplicate)
+- [x] Add WebSocket cleanup on server shutdown
+- [x] Improve error handling to surface errors to UI (graceful shutdown added)

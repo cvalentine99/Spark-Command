@@ -66,13 +66,14 @@ describe('WebSocket Server', () => {
     });
 
     it('should include timestamp in all messages', () => {
-      const message = createWebSocketMessage('test', { foo: 'bar' });
+      const message = createWebSocketMessage('connection', { foo: 'bar' });
       const parsed = JSON.parse(message);
 
       expect(parsed.timestamp).toBeDefined();
-      expect(typeof parsed.timestamp).toBe('string');
-      // Timestamp should be a valid ISO date
-      expect(new Date(parsed.timestamp).toISOString()).toBe(parsed.timestamp);
+      expect(typeof parsed.timestamp).toBe('number');
+      // Timestamp should be a valid Unix epoch milliseconds
+      expect(parsed.timestamp).toBeGreaterThan(0);
+      expect(new Date(parsed.timestamp).getTime()).toBe(parsed.timestamp);
     });
   });
 
