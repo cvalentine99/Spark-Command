@@ -11,7 +11,10 @@ import {
   Bell, 
   User,
   Menu,
-  MessageCircle
+  MessageCircle,
+  FileText,
+  Gauge,
+  Archive
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -32,6 +35,9 @@ export function MainLayout({ children }: MainLayoutProps) {
     { name: "Network", path: "/network", icon: Network },
     { name: "Settings", path: "/settings", icon: Settings },
     { name: "Support", path: "/support", icon: MessageCircle },
+    { name: "Logs", path: "/logs", icon: FileText },
+    { name: "Power", path: "/power", icon: Gauge },
+    { name: "Backup", path: "/backup", icon: Archive },
   ];
 
   return (

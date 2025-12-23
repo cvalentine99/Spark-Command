@@ -73,3 +73,24 @@
 - [x] Create Dockerfile.local for single-node deployment
 - [x] Create docker-compose.local.yml for local installation
 - [x] Add local system info (hostname, uptime, OS version)
+
+## System Logs Viewer
+- [x] Create backend API for reading journalctl and syslog
+- [x] Implement real-time log streaming with WebSocket or polling
+- [x] Build LogsPage UI with filtering and search
+- [x] Add log level filtering (error, warning, info, debug)
+- [x] Add service-specific log filtering (nvidia, docker, spark)
+
+## Power Management Controls
+- [x] Create backend API for nvidia-smi power management commands
+- [x] Implement GPU power limit adjustment controls
+- [x] Add fan curve visualization and controls
+- [x] Create thermal profile presets (quiet, balanced, performance)
+- [x] Add safety limits and confirmation dialogs
+
+## Backup/Restore Configuration
+- [x] Create backend API for exporting configuration as JSON
+- [x] Implement configuration import with validation
+- [x] Add UI for backup/restore in Settings page
+- [x] Include alert rules, integrations, and preferences in backup
+- [x] Add backup history and versioning

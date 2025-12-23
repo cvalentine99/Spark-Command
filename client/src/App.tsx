@@ -17,6 +17,9 @@ const InferencePage = lazy(() => import("./pages/InferencePage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const SupportPage = lazy(() => import("./pages/SupportPage"));
 const JobDetailsPage = lazy(() => import("./pages/JobDetailsPage"));
+const LogsPage = lazy(() => import("./pages/LogsPage"));
+const PowerPage = lazy(() => import("./pages/PowerPage"));
+const BackupPage = lazy(() => import("./pages/BackupPage"));
 
 // Loading fallback component
 function PageLoader() {
@@ -43,6 +46,9 @@ function Router() {
           <Route path={"/network"} component={NetworkPage} />
           <Route path={"/settings"} component={SettingsPage} />
           <Route path={"/support"} component={SupportPage} />
+          <Route path={"/logs"} component={LogsPage} />
+          <Route path={"/power"} component={PowerPage} />
+          <Route path={"/backup"} component={BackupPage} />
           <Route path={"/404"} component={NotFound} />
           {/* Final fallback route */}
           <Route component={NotFound} />
