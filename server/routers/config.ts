@@ -39,10 +39,29 @@ const ConfigSchema = z.object({
     }),
     splunk: z.object({
       enabled: z.boolean(),
-      host: z.string().optional(),
-      token: z.string().optional(),
+      serverUrl: z.string().optional(),
+      hecToken: z.string().optional(),
+      index: z.string().optional(),
+      sourcetype: z.string().optional(),
+      sslVerify: z.boolean().optional(),
+    }),
+    chronicle: z.object({
+      enabled: z.boolean(),
+      customerId: z.string().optional(),
+      serviceAccountKey: z.string().optional(),
+    }),
+    prometheus: z.object({
+      url: z.string().optional(),
+      scrapeInterval: z.number().optional(),
+      refreshRate: z.number().optional(),
     }),
   }),
+  logging: z.object({
+    retention: z.number().optional(),
+    forwardSystemLogs: z.boolean().optional(),
+    forwardContainerLogs: z.boolean().optional(),
+    forwardAuditLogs: z.boolean().optional(),
+  }).optional(),
   spark: z.object({
     masterUrl: z.string().optional(),
     defaultExecutorMemory: z.string().optional(),
@@ -129,7 +148,25 @@ const defaultConfig: Config = {
     },
     splunk: {
       enabled: false,
+      serverUrl: "https://splunk.example.com:8088",
+      index: "dgx_spark_metrics",
+      sourcetype: "dcgm:metrics",
+      sslVerify: true,
     },
+    chronicle: {
+      enabled: false,
+    },
+    prometheus: {
+      url: "http://localhost:9090",
+      scrapeInterval: 15,
+      refreshRate: 5,
+    },
+  },
+  logging: {
+    retention: 90,
+    forwardSystemLogs: true,
+    forwardContainerLogs: true,
+    forwardAuditLogs: true,
   },
   spark: {
     masterUrl: "spark://localhost:7077",
