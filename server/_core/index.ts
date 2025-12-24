@@ -7,6 +7,8 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { getWebSocketService } from "../services/websocket";
+import { getClusterService } from "../services/cluster";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -30,11 +32,14 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+
   // tRPC API
   app.use(
     "/api/trpc",
@@ -43,6 +48,18 @@ async function startServer() {
       createContext,
     })
   );
+
+  // Initialize WebSocket server for real-time metrics streaming
+  const wsService = getWebSocketService();
+  wsService.initialize(server);
+
+  // Initialize cluster service and connect to WebSocket
+  const clusterService = getClusterService();
+  clusterService.setWebSocketService(wsService);
+
+  // Start cluster monitoring (2 second refresh interval)
+  clusterService.startMonitoring(2000);
+
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
@@ -59,7 +76,22 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
+    console.log(`WebSocket server running on ws://localhost:${port}/ws`);
   });
+
+  // Graceful shutdown
+  const shutdown = () => {
+    console.log("\nShutting down gracefully...");
+    clusterService.stopMonitoring();
+    wsService.shutdown();
+    server.close(() => {
+      console.log("Server closed");
+      process.exit(0);
+    });
+  };
+
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
 }
 
 startServer().catch(console.error);
