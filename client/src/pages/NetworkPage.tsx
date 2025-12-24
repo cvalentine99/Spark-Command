@@ -93,14 +93,73 @@ const BandwidthChart = ({ data }: { data: number[] }) => {
   );
 };
 
-// Connection List Component
+// Local Services Component - Now connected to backend
+const LocalServicesCard = () => {
+  const servicesQuery = trpc.local.getServiceStatus.useQuery(undefined, {
+    refetchInterval: 15000,
+  });
+
+  const services = servicesQuery.data?.services || [];
+  const isLoading = servicesQuery.isLoading;
+
+  return (
+    <GlassCard>
+      <h2 className="text-lg font-display font-bold mb-4 flex items-center gap-2">
+        <Server className="h-5 w-5 text-primary" /> Local Services
+        {isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+        {servicesQuery.data?.source === 'simulated' && (
+          <span className="text-[10px] text-muted-foreground font-normal">(Simulated)</span>
+        )}
+      </h2>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {services.map((service) => (
+            <div key={service.name} className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
+              <div>
+                <div className="text-sm font-medium">{service.name}</div>
+                <div className="text-xs text-muted-foreground font-mono">:{service.port}</div>
+              </div>
+              <div className={cn(
+                "h-2 w-2 rounded-full",
+                service.status === "running" ? "bg-green-500 shadow-[0_0_5px_#22c55e]" :
+                service.status === "stopped" ? "bg-red-500" : "bg-yellow-500"
+              )} />
+            </div>
+          ))}
+        </div>
+      )}
+    </GlassCard>
+  );
+};
+
+// Connection List Component - Now connected to backend
 const ConnectionList = () => {
-  const connections = [
-    { remote: "192.168.1.100", port: 22, protocol: "SSH", state: "ESTABLISHED" },
-    { remote: "192.168.1.1", port: 443, protocol: "HTTPS", state: "ESTABLISHED" },
-    { remote: "172.17.0.2", port: 8080, protocol: "HTTP", state: "ESTABLISHED" },
-    { remote: "127.0.0.1", port: 3000, protocol: "Node.js", state: "LISTEN" },
-  ];
+  const connectionsQuery = trpc.local.getConnections.useQuery({ limit: 10 }, {
+    refetchInterval: 10000,
+  });
+
+  const connections = connectionsQuery.data?.connections || [];
+  const isLoading = connectionsQuery.isLoading;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-4">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (connections.length === 0) {
+    return (
+      <div className="text-center py-4 text-muted-foreground text-sm">
+        No active connections
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-2">
@@ -124,6 +183,11 @@ const ConnectionList = () => {
           </div>
         </div>
       ))}
+      {connectionsQuery.data?.source === 'simulated' && (
+        <div className="text-[10px] text-muted-foreground text-center pt-1">
+          (Simulated data)
+        </div>
+      )}
     </div>
   );
 };
@@ -335,36 +399,8 @@ export default function NetworkPage() {
         </GlassCard>
       </div>
 
-      {/* Local Services */}
-      <GlassCard>
-        <h2 className="text-lg font-display font-bold mb-4 flex items-center gap-2">
-          <Server className="h-5 w-5 text-primary" /> Local Services
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[
-            { name: "Command Center", port: 3000, status: "running" },
-            { name: "DCGM Exporter", port: 9400, status: "running" },
-            { name: "Node Exporter", port: 9100, status: "running" },
-            { name: "Spark Master", port: 7077, status: "running" },
-            { name: "Spark UI", port: 8080, status: "running" },
-            { name: "Jupyter Lab", port: 8888, status: "running" },
-            { name: "vLLM Server", port: 8000, status: "running" },
-            { name: "ExtraHop Agent", port: 443, status: "pending" },
-          ].map((service) => (
-            <div key={service.name} className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
-              <div>
-                <div className="text-sm font-medium">{service.name}</div>
-                <div className="text-xs text-muted-foreground font-mono">:{service.port}</div>
-              </div>
-              <div className={cn(
-                "h-2 w-2 rounded-full",
-                service.status === "running" ? "bg-green-500 shadow-[0_0_5px_#22c55e]" : 
-                service.status === "pending" ? "bg-yellow-500" : "bg-red-500"
-              )} />
-            </div>
-          ))}
-        </div>
-      </GlassCard>
+      {/* Local Services - Now connected to backend */}
+      <LocalServicesCard />
     </div>
   );
 }

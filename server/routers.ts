@@ -8,6 +8,7 @@ import { localRouter } from "./routers/local";
 import { logsRouter } from "./routers/logs";
 import { powerRouter } from "./routers/power";
 import { configRouter } from "./routers/config";
+import { inferenceRouter } from "./routers/inference";
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -18,6 +19,7 @@ export const appRouter = router({
   logs: logsRouter,
   power: powerRouter,
   config: configRouter,
+  inference: inferenceRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
