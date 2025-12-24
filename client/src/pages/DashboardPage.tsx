@@ -317,7 +317,7 @@ const StorageCard = () => {
     refetchInterval: 30000,
   });
 
-  const device = storageQuery.data?.devices[0];
+  const device = storageQuery.data?.devices?.[0];
   const usedTB = device ? device.used / (1024 * 1024 * 1024 * 1024) : 0;
   const totalTB = device ? device.total / (1024 * 1024 * 1024 * 1024) : 2;
   const percentage = device ? (device.used / device.total) * 100 : 0;

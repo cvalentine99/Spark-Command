@@ -295,3 +295,81 @@ export function formatUptime(seconds: number): string {
   const minutes = Math.floor((seconds % 3600) / 60);
   return `${days}d ${hours}h ${minutes}m`;
 }
+
+// =============================================================================
+// Local Metrics Hooks (New unified API)
+// =============================================================================
+
+const FAST_REFRESH = 5000;
+const NORMAL_REFRESH = 15000;
+const SLOW_REFRESH = 30000;
+
+/**
+ * Hook for local GPU metrics
+ */
+export function useLocalGPU(options?: { enabled?: boolean }) {
+  const query = trpc.local.getGPU.useQuery(undefined, {
+    refetchInterval: FAST_REFRESH,
+    enabled: options?.enabled ?? true,
+  });
+
+  return {
+    gpu: query.data,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    refetch: query.refetch,
+  };
+}
+
+/**
+ * Hook for local CPU metrics
+ */
+export function useLocalCPU(options?: { enabled?: boolean }) {
+  const query = trpc.local.getCPU.useQuery(undefined, {
+    refetchInterval: NORMAL_REFRESH,
+    enabled: options?.enabled ?? true,
+  });
+
+  return {
+    cpu: query.data,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    refetch: query.refetch,
+  };
+}
+
+/**
+ * Hook for node overview
+ */
+export function useNodeOverview(options?: { enabled?: boolean }) {
+  const query = trpc.local.getOverview.useQuery(undefined, {
+    refetchInterval: FAST_REFRESH,
+    enabled: options?.enabled ?? true,
+  });
+
+  return {
+    overview: query.data,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    refetch: query.refetch,
+  };
+}
+
+/**
+ * Hook for health status
+ */
+export function useHealthStatus(options?: { enabled?: boolean }) {
+  const query = trpc.local.health.useQuery(undefined, {
+    refetchInterval: NORMAL_REFRESH,
+    enabled: options?.enabled ?? true,
+  });
+
+  return {
+    health: query.data,
+    isHealthy: query.data?.status === 'healthy',
+    isSimulated: query.data?.simulated ?? true,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    refetch: query.refetch,
+  };
+}

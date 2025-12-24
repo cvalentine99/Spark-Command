@@ -135,26 +135,12 @@ export default function PowerPage() {
     },
   });
 
-  const resetToDefaultsMutation = trpc.power.resetToDefaults.useMutation({
-    onSuccess: (data) => {
-      toast.success(data.message);
-      setPowerLimit(250);
-      setFanSpeed(55);
-      setManualFan(false);
-      setSelectedProfile("Performance");
-      powerStateQuery.refetch();
-    },
-    onError: (error) => {
-      toast.error(`Failed to reset: ${error.message}`);
-    },
-  });
-
   const powerState = powerStateQuery.data?.state;
-  const thermalProfiles = profilesQuery.data?.profiles || [];
-  const powerHistory = historyQuery.data?.history.map(p => ({
+  const thermalProfiles = profilesQuery.data || [];
+  const powerHistory = historyQuery.data?.history.map((p: { timestamp: number; power: number; temperature: number; fanSpeed: number }) => ({
     time: new Date(p.timestamp).toLocaleTimeString(),
     power: p.power,
-    temp: p.temp,
+    temp: p.temperature,
   })) || [];
 
   // Update local state when power state changes
@@ -194,7 +180,7 @@ export default function PowerPage() {
 
   // Apply thermal profile
   const applyProfile = (profileName: string) => {
-    const profile = thermalProfiles.find((p) => p.name === profileName);
+    const profile = thermalProfiles.find((p: { name: string; powerLimit: number; description: string }) => p.name === profileName);
     if (!profile) return;
 
     setConfirmDialog({
@@ -215,7 +201,7 @@ export default function PowerPage() {
       title: "Reset to Defaults",
       description: "This will reset power limit to default and enable automatic fan control. Continue?",
       action: () => {
-        resetToDefaultsMutation.mutate();
+        resetFanAutoMutation.mutate({ gpuIndex: 0 });
         setConfirmDialog((prev) => ({ ...prev, open: false }));
       },
     });
@@ -265,9 +251,9 @@ export default function PowerPage() {
         <Button 
           variant="outline" 
           onClick={resetToDefaults}
-          disabled={resetToDefaultsMutation.isPending}
+          disabled={resetFanAutoMutation.isPending}
         >
-          {resetToDefaultsMutation.isPending ? (
+          {resetFanAutoMutation.isPending ? (
             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
           ) : (
             <RotateCcw className="w-4 h-4 mr-2" />

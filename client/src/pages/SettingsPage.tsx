@@ -87,13 +87,13 @@ export default function SettingsPage() {
   const [splunkTestStatus, setSplunkTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
 
   // tRPC mutations
-  const updatePrometheusConfig = trpc.metrics.updateConfig.useMutation({
-    onSuccess: (data) => {
+  const testMetricsConnection = trpc.metrics.testConnection.useMutation({
+    onSuccess: (data: { success: boolean; message: string; simulated?: boolean }) => {
       if (data.success) {
         setPrometheusStatus('connected');
         setPrometheusMessage(data.message);
-        toast.success("Prometheus connected", {
-          description: `Successfully connected to ${data.url}`
+        toast.success("Metrics service connected", {
+          description: data.simulated ? "Using simulated data" : "Connected to real metrics"
         });
       } else {
         setPrometheusStatus('error');
@@ -121,7 +121,7 @@ export default function SettingsPage() {
     setPrometheusMessage("Testing connection...");
     
     try {
-      await updatePrometheusConfig.mutateAsync({ prometheusUrl: prometheusConfig.url });
+      await testMetricsConnection.mutateAsync();
     } catch (error) {
       // Error handled in mutation callbacks
     }

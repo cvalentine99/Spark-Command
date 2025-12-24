@@ -255,8 +255,8 @@ export default function NodesPage() {
     gpuTemp: metrics?.gpu.temperature ?? 0,
     gpuPower: metrics?.gpu.powerDraw ?? 0,
     fanSpeed: metrics?.gpu.fanSpeed ?? 0,
-    nvmeUsed: metrics?.storage.devices[0] ? metrics.storage.devices[0].used / (1024 * 1024 * 1024 * 1024) : 0,
-    nvmeTotal: metrics?.storage.devices[0] ? metrics.storage.devices[0].total / (1024 * 1024 * 1024 * 1024) : 2,
+    nvmeUsed: metrics?.storage.devices?.[0] ? metrics.storage.devices[0].used / (1024 * 1024 * 1024 * 1024) : 0,
+    nvmeTotal: metrics?.storage.devices?.[0] ? metrics.storage.devices[0].total / (1024 * 1024 * 1024 * 1024) : 2,
     networkRx: metrics?.network.interfaces[0]?.rxBytes ? metrics.network.interfaces[0].rxBytes / (1024 * 1024) : 0,
     networkTx: metrics?.network.interfaces[0]?.txBytes ? metrics.network.interfaces[0].txBytes / (1024 * 1024) : 0,
   };
@@ -311,7 +311,7 @@ export default function NodesPage() {
         <div className="flex flex-wrap gap-6 text-sm">
           <div className="flex flex-col">
             <span className="text-muted-foreground text-xs">CPU</span>
-            <span className="font-mono">{systemInfo?.cpu ?? "10x X925 + 10x A725"}</span>
+            <span className="font-mono">{systemInfo?.gpuName ?? "10x X925 + 10x A725"}</span>
           </div>
           <div className="flex flex-col">
             <span className="text-muted-foreground text-xs">GPU</span>
@@ -319,7 +319,7 @@ export default function NodesPage() {
           </div>
           <div className="flex flex-col">
             <span className="text-muted-foreground text-xs">Memory</span>
-            <span className="font-mono">{systemInfo?.memory ?? "128GB LPDDR5x"}</span>
+            <span className="font-mono">128GB LPDDR5x</span>
           </div>
           <div className="flex flex-col">
             <span className="text-muted-foreground text-xs">Uptime</span>

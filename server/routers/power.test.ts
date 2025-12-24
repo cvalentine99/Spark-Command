@@ -45,8 +45,8 @@ describe("Power Router", () => {
       expect(powerRouter._def.procedures.getPowerHistory).toBeDefined();
     });
 
-    it("should have resetToDefaults procedure defined", () => {
-      expect(powerRouter._def.procedures.resetToDefaults).toBeDefined();
+    it("should have resetFanAuto procedure defined", () => {
+      expect(powerRouter._def.procedures.resetFanAuto).toBeDefined();
     });
   });
 

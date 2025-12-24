@@ -104,3 +104,17 @@
 - [x] NetworkPage - Connect to trpc.local.getNetwork, local.health
 - [x] SparkPage - Connect active jobs list to trpc.spark.getApplications, getJobHistory, getClusterResources
 - [x] JobDetailsPage - Connect to trpc.spark.getJobHistory, getJobStatus, killJob
+
+## Application Refactoring
+- [x] Audit codebase structure and identify issues
+- [x] Consolidate duplicate service files (prometheus.ts vs local-metrics.ts)
+- [x] Create shared types for GPU metrics, system info, job status
+- [x] Refactor backend routers with consistent error handling
+- [x] Add input validation with Zod schemas
+- [x] Refactor frontend components to reduce duplication
+- [x] Extract reusable chart components
+- [x] Consolidate WebSocket message types
+- [x] Apply security best practices (sanitization, protected routes)
+- [x] Remove dead code and unused imports (prometheus.ts, prometheus.test.ts removed)
+- [x] Optimize API polling intervals
+- [x] Add proper TypeScript strict mode compliance
